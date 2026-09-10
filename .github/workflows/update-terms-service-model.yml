@@ -1,4 +1,4 @@
-name: Update Terms Service Model
+name: Correct Terms Section Numbering
 
 on:
   push:
@@ -15,13 +15,46 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: main
-      - run: python3 .github/scripts/update_terms.py
-      - run: |
-          grep -q "Private Charter Service" terms.html
-          grep -q "September 10, 2026" terms.html
-      - run: |
+      - name: Correct section numbering
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('terms.html')
+          s = p.read_text()
+          headings = [
+              ('18. Cancellations, Changes, and No-Shows', '7. Cancellations, Changes, and No-Shows'),
+              ('7. Flight, Ferry, Traffic, and Schedule Delays', '8. Flight, Ferry, Traffic, and Schedule Delays'),
+              ('8. Customer Conduct and Safety', '9. Customer Conduct and Safety'),
+              ('9. Vehicle Care, Cleaning, and Damage', '10. Vehicle Care, Cleaning, and Damage'),
+              ('10. Personal Property', '11. Personal Property'),
+              ('11. Website Use', '12. Website Use'),
+              ('12. Third-Party Services', '13. Third-Party Services'),
+              ('13. Limitation of Liability', '14. Limitation of Liability'),
+              ('14. Indemnification', '15. Indemnification'),
+              ('15. Governing Law', '16. Governing Law'),
+              ('16. Changes to These Terms', '17. Changes to These Terms'),
+              ('17. Contact', '18. Contact'),
+          ]
+          for old, new in headings:
+              if old not in s:
+                  raise SystemExit(f'Missing heading: {old}')
+              s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
+      - name: Validate sequential headings
+        run: |
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          s = Path('terms.html').read_text()
+          nums = [int(n) for n in re.findall(r'<h2>(\d+)\.', s)]
+          expected = list(range(1, 19))
+          assert nums == expected, f'Heading sequence is {nums}, expected {expected}'
+          PY
+      - name: Commit correction
+        run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add terms.html
-          git commit -m "Align terms with current transportation services"
+          git commit -m "Correct terms section numbering"
           git push origin main
