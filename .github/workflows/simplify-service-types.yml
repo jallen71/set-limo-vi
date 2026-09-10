@@ -12,104 +12,25 @@ jobs:
   update-service-types:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Simplify service model
+      - uses: actions/checkout@v4
+      - name: Update service presentation
         shell: python
         run: |
           from pathlib import Path
-          p = Path('index.html')
-          s = p.read_text(encoding='utf-8')
-
-          old = '''                <option value="transfer">Point-to-Point Transfer</option>
-                <option value="private-charter">Private Charter</option>
-                <option value="event">Event Service</option>
-                <option value="multi-day">Multi-Day / On-Call Transportation</option>'''
-          new = '''                <option value="transfer">Point-to-Point Transfer</option>
-                <option value="private-charter">Private Charter</option>
-                <option value="multi-day">Multi-Day / On-Call Transportation</option>'''
-          assert old in s
-          s = s.replace(old, new, 1)
-
-          old_cards = '''      <div class="card">
-        <h3>Transfers</h3>
-        <p>Airport arrivals, resort pickups, villa transfers, and direct point-to-point transportation.</p>
-      </div>
-      <div class="card">
-        <h3>Coordination</h3>
-        <p>Ferry-aligned pickups, terminal transfers, Red Hook timing, and St. John requests handled through direct confirmation.</p>
-      </div>
-      <div class="card">
-        <h3>Private Charter</h3>
-        <p>Reserved luxury van and driver service for multi-stop plans, business movement, dinners, and VIP needs. $600 includes up to 5 hours; additional time is $120 per hour. Reserved charter time runs continuously through final release.</p>
-      </div>
-      <div class="card">
-        <h3>Events</h3>
-        <p>Private transportation for weddings, celebrations, corporate events, and planned special occasions.</p>
-      </div>'''
-          new_cards = '''      <div class="card">
-        <h3>Point-to-Point Transfers</h3>
-        <p>Direct pickup and drop-off transportation for airport arrivals, resorts, villas, dinners, proms, weddings, events, cruise terminals, and ferry connections.</p>
-      </div>
-      <div class="card">
-        <h3>Private Charter</h3>
-        <p>Reserved luxury van and driver service when you need the vehicle to remain available for waiting, multiple stops, dinners, events, business movement, or VIP needs. $600 includes up to 5 hours; additional time is $120 per hour.</p>
-      </div>
-      <div class="card">
-        <h3>Multi-Day / On-Call</h3>
-        <p>Custom transportation for multiple days, dedicated availability, and planned schedules. Requests are reviewed based on dates, itinerary, and availability.</p>
-      </div>'''
-          assert old_cards in s
-          s = s.replace(old_cards, new_cards, 1)
-
-          blocks = [
-          '''          if (serviceType.value === "event") {
-            const selectedHours = Math.min(Math.max(Number.parseInt(hoursRequested.value, 10) || 3, 3), 12);
-            setHoursOptions(3, 12, selectedHours, false);
-            return;
-          }
-
-''',
-          '''          if (serviceType.value === "event") {
-            reviewEstimateMessage.textContent = "Event Service: Request for Quote / Owner Review based on requested time, itinerary, and vehicle availability." + stJohnText + extraStopText;
-            return;
-          }
-
-''',
-          '''          if (serviceType.value === "event") {
-            return addPaymentTerms("Event Service: Request for Quote / Owner Review based on requested time, itinerary, and vehicle availability." + (stJohnTrip ? " St. John coordination requires final review." : "") + (extraStop.checked ? " Extra stops may affect the final rate." : ""));
-          }
-
-''']
-          for block in blocks:
-            assert block in s
-            s = s.replace(block, '', 1)
-
-          for stale in ['<option value="event">Event Service</option>', 'serviceType.value === "event"', '<h3>Coordination</h3>', '<h3>Events</h3>']:
-            assert stale not in s
-          p.write_text(s, encoding='utf-8')
-
-      - name: Validate service selector
-        shell: python
-        run: |
-          from pathlib import Path
-          import re
-          s=Path('index.html').read_text()
-          block=re.search(r'<select id="service-type".*?</select>', s, re.S).group(0)
-          assert block.count('<option value=') == 3
-          assert 'value="transfer"' in block
-          assert 'value="private-charter"' in block
-          assert 'value="multi-day"' in block
-          assert 'value="event"' not in block
-          print('SERVICE TYPE VALIDATION: PASS')
-
+          p=Path('index.html')
+          s=p.read_text(encoding='utf-8')
+          old='Reserved luxury van and driver service for multi-stop plans, business movement, dinners, and VIP needs. $600 includes up to 5 hours; additional time is $120 per hour. Reserved charter time runs continuously through final release.'
+          new='Reserved transportation for extended service, multiple stops, waiting, and flexible itineraries.'
+          assert old in s, 'Private Charter service description not found'
+          s=s.replace(old,new,1)
+          p.write_text(s,encoding='utf-8')
+          assert '$600 includes up to 5 hours; additional time is $120 per hour. Reserved charter time runs continuously through final release.' not in s
+          print('PRIVATE CHARTER SERVICE CARD: PASS')
       - name: Commit update
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add index.html
           git diff --cached --check
-          git diff --cached --quiet && exit 0
-          git commit -m "Simplify reservation service types"
+          git commit -m "Remove charter pricing from services card"
           git push
