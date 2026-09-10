@@ -1,0 +1,37 @@
+name: Use Inside Gallery Image
+
+on:
+  push:
+    paths:
+      - '.github/workflows/use-inside-gallery-image.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  update-gallery:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Replace second gallery image
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('index.html')
+          s = p.read_text(encoding='utf-8')
+          old = '<img src="png/luxury-int2.png" alt="Van interior lighting" />'
+          new = '<img src="png/Inside.png" alt="Van interior lighting" />'
+          assert old in s, 'second gallery image reference not found'
+          s = s.replace(old, new, 1)
+          p.write_text(s, encoding='utf-8')
+          assert 'src="png/Inside.png"' in s
+          print('INSIDE.PNG GALLERY REPLACEMENT: PASS')
+          PY
+      - name: Commit replacement
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git diff --cached --check
+          git commit -m "Use Inside.png as second gallery image"
+          git push
