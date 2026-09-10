@@ -1,0 +1,201 @@
+name: Apply charter pricing update
+
+on:
+  push:
+    paths:
+      - '.github/workflows/apply-charter-update.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  update-site:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply controlled website changes
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('index.html')
+          text = path.read_text(encoding='utf-8')
+          original = text
+
+          def replace_once(old, new, label):
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected exactly 1 match, found {count}')
+              text = text.replace(old, new, 1)
+
+          replace_once(
+              '''                <option value="transfer">Transfer</option>\n                <option value="private-chauffeur">Chauffeur</option>\n                <option value="event">Event Service</option>\n                <option value="hourly-rental">Hourly Service</option>\n                <option value="daily-rental">Daily Service</option>''',
+              '''                <option value="transfer">Point-to-Point Transfer</option>\n                <option value="private-charter">Private Charter</option>\n                <option value="event">Event Service</option>\n                <option value="multi-day">Multi-Day / On-Call Transportation</option>''',
+              'service options'
+          )
+
+          replace_once(
+              '''        <h3>Chauffeur</h3>\n        <p>Reserved private vehicle and driver service for dinners, business movement, hourly service, daily service, VIP needs, and controlled multi-stop plans.</p>''',
+              '''        <h3>Private Charter</h3>\n        <p>Reserved luxury van and driver service for multi-stop plans, business movement, dinners, and VIP needs. $600 includes up to 5 hours; additional time is $120 per hour. Reserved charter time runs continuously through final release.</p>''',
+              'service card'
+          )
+
+          replace_once(
+              '''      const HOURLY_RATE = 125;\n      const HOURLY_MINIMUM_HOURS = 3;''',
+              '''      const CHARTER_MINIMUM = 600;\n      const CHARTER_INCLUDED_HOURS = 5;\n      const CHARTER_OVERTIME_RATE = 120;''',
+              'pricing constants'
+          )
+
+          pattern = r'''        const serviceMultiplier = serviceType === "hourly-rental" \|\| serviceType === "private-chauffeur" \? 2 : serviceType === "event" \? 1\.5 : serviceType === "daily-rental" \? 4 : 1;'''
+          text, count = re.subn(pattern, '        const serviceMultiplier = 1;', text, count=1)
+          if count != 1:
+              raise SystemExit(f'service multiplier: expected 1 match, found {count}')
+
+          marker = '''      function getLocalDateInputValue(date) {'''
+          if marker not in text:
+              raise SystemExit('charter helper insertion marker missing')
+          helper = '''      function calculateCharterTotal(hours) {\n        const requestedHours = Math.max(Number.parseInt(hours, 10) || CHARTER_INCLUDED_HOURS, CHARTER_INCLUDED_HOURS);\n        return CHARTER_MINIMUM + Math.max(requestedHours - CHARTER_INCLUDED_HOURS, 0) * CHARTER_OVERTIME_RATE;\n      }\n\n'''
+          text = text.replace(marker, helper + marker, 1)
+
+          old_selftest = '''        console.assert(roundTrip.total === 360, "Round trip standard transfer should total 360");'''
+          new_selftest = '''        console.assert(roundTrip.total === 360, "Round trip standard transfer should total 360");\n\n        console.assert(calculateCharterTotal(5) === 600, "Five-hour charter should total 600");\n        console.assert(calculateCharterTotal(6) === 720, "Six-hour charter should total 720");'''
+          replace_once(old_selftest, new_selftest, 'self tests')
+
+          enforce_pattern = r'''        function enforceHoursRule\(\) \{.*?\n        \}\n\n        function updateNotices\(\) \{'''
+          enforce_replacement = '''        function enforceHoursRule() {\n          const stJohnTrip = isStJohnRoute(pickup.value, dropoff.value);\n\n          if (!serviceType.value) {\n            hoursRequestedRow.style.display = "none";\n            hoursRequested.required = false;\n            hoursRequested.disabled = true;\n            hoursRequested.value = "";\n            return;\n          }\n\n          if (serviceType.value === "multi-day") {\n            hoursRequestedRow.style.display = "none";\n            hoursRequested.required = false;\n            hoursRequested.disabled = true;\n            hoursRequested.value = "";\n            return;\n          }\n\n          hoursRequestedRow.style.display = "block";\n          hoursRequested.required = true;\n\n          if (serviceType.value === "private-charter") {\n            const selectedHours = Math.min(Math.max(Number.parseInt(hoursRequested.value, 10) || CHARTER_INCLUDED_HOURS, CHARTER_INCLUDED_HOURS), 12);\n            setHoursOptions(CHARTER_INCLUDED_HOURS, 12, selectedHours, false);\n            return;\n          }\n\n          if (serviceType.value === "event") {\n            const selectedHours = Math.min(Math.max(Number.parseInt(hoursRequested.value, 10) || 3, 3), 12);\n            setHoursOptions(3, 12, selectedHours, false);\n            return;\n          }\n\n          if (serviceType.value === "transfer") {\n            setHoursOptions(stJohnTrip ? 3 : 2, stJohnTrip ? 3 : 2, stJohnTrip ? 3 : 2, true);\n          }\n        }\n\n        function updateNotices() {'''
+          text, count = re.subn(enforce_pattern, enforce_replacement, text, count=1, flags=re.S)
+          if count != 1:
+              raise SystemExit(f'enforceHoursRule: expected 1 match, found {count}')
+
+          review_pattern = r'''        function updateReviewEstimateMessage\(\) \{.*?\n        \}\n\n        function updatePrice\(\) \{'''
+          review_replacement = '''        function updateReviewEstimateMessage() {\n          const stJohnText = isStJohnRoute(pickup.value, dropoff.value) ? " St. John coordination requires final review." : "";\n          const extraStopText = extraStop.checked ? " Extra stops may affect the final rate." : "";\n\n          if (serviceType.value === "private-charter") {\n            const selectedHours = Math.min(Math.max(Number.parseInt(hoursRequested.value, 10) || CHARTER_INCLUDED_HOURS, CHARTER_INCLUDED_HOURS), 12);\n            const selectedEstimate = calculateCharterTotal(selectedHours);\n            reviewEstimateMessage.textContent = "Private Charter: $600 minimum includes up to 5 continuous reserved hours. Selected estimate: $" + selectedEstimate + " for " + selectedHours + " hours. Additional time after 5 hours is $120/hr ($60 per half hour). Ordinary waiting during the reserved charter period is included. Charter time continues until final release." + stJohnText + extraStopText;\n            return;\n          }\n\n          if (serviceType.value === "multi-day") {\n            reviewEstimateMessage.textContent = "Multi-Day / On-Call Transportation: Request for Quote / Owner Review. Pricing is based on the proposed dates, availability window, and itinerary." + stJohnText + extraStopText;\n            return;\n          }\n\n          if (serviceType.value === "event") {\n            reviewEstimateMessage.textContent = "Event Service: Request for Quote / Owner Review based on requested time, itinerary, and vehicle availability." + stJohnText + extraStopText;\n            return;\n          }\n\n          reviewEstimateMessage.textContent = "Standard St. Thomas point-to-point transfer starts at $180.";\n        }\n\n        function updatePrice() {'''
+          text, count = re.subn(review_pattern, review_replacement, text, count=1, flags=re.S)
+          if count != 1:
+              raise SystemExit(f'updateReviewEstimateMessage: expected 1 match, found {count}')
+
+          pricing_pattern = r'''        function getPricingText\(\) \{.*?\n        \}\n\n        function buildTemplateParams\(\) \{'''
+          pricing_replacement = '''        function getPricingText() {\n          const stJohnTrip = isStJohnRoute(pickup.value, dropoff.value);\n\n          if (serviceType.value === "private-charter") {\n            const selectedHours = Math.min(Math.max(Number.parseInt(hoursRequested.value, 10) || CHARTER_INCLUDED_HOURS, CHARTER_INCLUDED_HOURS), 12);\n            const selectedEstimate = calculateCharterTotal(selectedHours);\n            return addPaymentTerms("Private Charter: $600 minimum includes up to 5 continuous reserved hours. Selected estimate: $" + selectedEstimate + " for " + selectedHours + " hours. Additional time after 5 hours is $120/hr ($60 per half hour). Ordinary waiting during the reserved charter period is included. Charter time continues until final release." + (stJohnTrip ? " St. John coordination requires final review." : "") + (extraStop.checked ? " Extra stops may affect the final rate." : ""));\n          }\n\n          if (serviceType.value === "multi-day") {\n            return addPaymentTerms("Multi-Day / On-Call Transportation: Request for Quote / Owner Review. Pricing is based on proposed dates, availability window, itinerary, and vehicle availability." + (stJohnTrip ? " St. John coordination requires final review." : "") + (extraStop.checked ? " Extra stops may affect the final rate." : ""));\n          }\n\n          if (serviceType.value === "event") {\n            return addPaymentTerms("Event Service: Request for Quote / Owner Review based on requested time, itinerary, and vehicle availability." + (stJohnTrip ? " St. John coordination requires final review." : "") + (extraStop.checked ? " Extra stops may affect the final rate." : ""));\n          }\n\n          if (stJohnTrip && extraStop.checked) {\n            return addPaymentTerms("Estimated request total: $" + totalPriceEl.textContent + ". St. John coordination and extra stop require final review.");\n          }\n\n          if (stJohnTrip) {\n            return addPaymentTerms("Estimated request total: $" + totalPriceEl.textContent + ". St. John trips require additional coordination before final confirmation.");\n          }\n\n          if (extraStop.checked) {\n            return addPaymentTerms("Estimated request total: $" + totalPriceEl.textContent + ". Extra stops may affect the final rate.");\n          }\n\n          return addPaymentTerms("Estimated request total: $" + totalPriceEl.textContent + ".");\n        }\n\n        function buildTemplateParams() {'''
+          text, count = re.subn(pricing_pattern, pricing_replacement, text, count=1, flags=re.S)
+          if count != 1:
+              raise SystemExit(f'getPricingText: expected 1 match, found {count}')
+
+          replace_once(
+              '''            manual_confirmation_required: isStJohnRoute(pickup.value, dropoff.value) ? "Yes" : "No",''',
+              '''            manual_confirmation_required: (serviceType.value !== "transfer" || isStJohnRoute(pickup.value, dropoff.value)) ? "Yes" : "No",''',
+              'manual confirmation'
+          )
+
+          if text == original:
+              raise SystemExit('No changes were produced')
+
+          forbidden = ['HOURLY_RATE = 125', 'HOURLY_MINIMUM_HOURS = 3', 'value="private-chauffeur"', 'value="hourly-rental"', 'value="daily-rental"']
+          for token in forbidden:
+              if token in text:
+                  raise SystemExit(f'Legacy pricing token remains: {token}')
+
+          required = ['CHARTER_MINIMUM = 600', 'CHARTER_OVERTIME_RATE = 120', 'value="private-charter"', 'value="multi-day"', 'Request for Quote / Owner Review']
+          for token in required:
+              if token not in text:
+                  raise SystemExit(f'Required token missing: {token}')
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Static validation
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s = Path('index.html').read_text(encoding='utf-8')
+          checks = {
+            'transfer base 180': 'const BASE_RATE = 180;' in s,
+            'charter minimum 600': 'const CHARTER_MINIMUM = 600;' in s,
+            'charter overtime 120': 'const CHARTER_OVERTIME_RATE = 120;' in s,
+            'private charter option': 'value="private-charter">Private Charter<' in s,
+            'multi-day option': 'value="multi-day">Multi-Day / On-Call Transportation<' in s,
+            'max passengers 6': 'max="6"' in s,
+            'round trip preserved': 'id="round-trip"' in s,
+            'extra stop preserved': 'id="extra-stop"' in s,
+            'gallery preserved': 'png/luxury-int.png' in s and 'png/luxury-int2.png' in s and 'png/van1.png' in s,
+            'EmailJS preserved': 'emailjs' in s,
+          }
+          failed = [k for k,v in checks.items() if not v]
+          for k,v in checks.items():
+              print(('PASS' if v else 'FAIL') + ': ' + k)
+          if failed:
+              raise SystemExit('Static validation failed: ' + ', '.join(failed))
+          PY
+
+      - name: Install browser test dependency
+        shell: bash
+        run: |
+          npm install --no-save playwright@1.55.0
+          npx playwright install chromium
+
+      - name: Browser validation
+        shell: bash
+        run: |
+          python3 -m http.server 8000 >/tmp/set-http.log 2>&1 &
+          sleep 2
+          node <<'JS'
+          const { chromium } = require('playwright');
+          (async () => {
+            const browser = await chromium.launch({headless: true});
+            const page = await browser.newPage({viewport: {width: 1280, height: 900}});
+            const errors = [];
+            page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
+            page.on('pageerror', err => errors.push(err.message));
+            await page.goto('http://127.0.0.1:8000/index.html', {waitUntil: 'networkidle'});
+
+            const title = await page.title();
+            if (!title.includes('Superb Executive Transportation')) throw new Error('Homepage title failed');
+            if (await page.locator('.gallery img').count() < 3) throw new Error('Gallery images missing');
+            if ((await page.locator('#number-of-passengers').getAttribute('max')) !== '6') throw new Error('Passenger max not 6');
+            if (!(await page.locator('#round-trip').count())) throw new Error('Round trip missing');
+            if (!(await page.locator('#extra-stop').count())) throw new Error('Extra stop missing');
+
+            await page.selectOption('#service-type', 'transfer');
+            await page.waitForTimeout(50);
+            const transferTotal = (await page.locator('#total-price').textContent()).trim();
+            if (transferTotal !== '180') throw new Error('Transfer base should be 180, got ' + transferTotal);
+
+            await page.selectOption('#service-type', 'private-charter');
+            await page.waitForTimeout(50);
+            let charterText = await page.locator('#review-estimate-message').textContent();
+            if (!charterText.includes('$600') || !charterText.includes('$120/hr')) throw new Error('Charter 5-hour pricing text failed: ' + charterText);
+            await page.selectOption('#hours-requested', '6');
+            await page.waitForTimeout(50);
+            charterText = await page.locator('#review-estimate-message').textContent();
+            if (!charterText.includes('$720')) throw new Error('Six-hour charter estimate should be 720: ' + charterText);
+
+            await page.selectOption('#service-type', 'multi-day');
+            await page.waitForTimeout(50);
+            const multiText = await page.locator('#review-estimate-message').textContent();
+            if (!multiText.includes('Request for Quote / Owner Review')) throw new Error('Multi-day quote behavior failed: ' + multiText);
+
+            await page.setViewportSize({width: 390, height: 844});
+            const bodyWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+            if (bodyWidth > 390) throw new Error('Mobile horizontal overflow: ' + bodyWidth);
+
+            if (errors.length) throw new Error('Browser console/page errors: ' + errors.join(' | '));
+            console.log('PASS: browser validation');
+            await browser.close();
+          })().catch(err => { console.error(err); process.exit(1); });
+          JS
+
+      - name: Commit verified website update
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git diff --cached --check
+          git commit -m "Update transfer and private charter pricing"
+          git push origin main
