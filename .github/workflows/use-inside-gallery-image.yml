@@ -1,4 +1,4 @@
-name: Use Inside Gallery Image
+name: Update Events Service Copy
 
 on:
   push:
@@ -9,29 +9,30 @@ permissions:
   contents: write
 
 jobs:
-  update-gallery:
+  update-events-copy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Replace second gallery image
+        with:
+          ref: main
+      - name: Update Events service wording
         run: |
           python - <<'PY'
           from pathlib import Path
           p = Path('index.html')
           s = p.read_text(encoding='utf-8')
-          old = '<img src="png/luxury-int2.png" alt="Van interior lighting" />'
-          new = '<img src="png/Inside.png" alt="Van interior lighting" />'
-          assert old in s, 'second gallery image reference not found'
+          old = '<p>Private transportation for weddings, celebrations, corporate events, and planned special occasions.</p>'
+          new = '<p>Private transportation for weddings, funerals, memorial services, and other occasions requiring dedicated transportation.</p>'
+          assert old in s, 'Events service wording not found'
           s = s.replace(old, new, 1)
           p.write_text(s, encoding='utf-8')
-          assert 'src="png/Inside.png"' in s
-          print('INSIDE.PNG GALLERY REPLACEMENT: PASS')
+          assert new in s
           PY
-      - name: Commit replacement
+      - name: Commit update
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add index.html
           git diff --cached --check
-          git commit -m "Use Inside.png as second gallery image"
-          git push
+          git commit -m "Add funeral and memorial transportation to Events"
+          git push origin main
