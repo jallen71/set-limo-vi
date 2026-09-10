@@ -1,0 +1,52 @@
+name: Add Hampton by Hilton St. Thomas
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/add-hampton-hilton.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  update-hotel-list:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Add Hampton by Hilton to pickup and drop-off lists
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('index.html')
+          text = path.read_text(encoding='utf-8')
+          option = '              <option value="hampton-by-hilton-st-thomas">Hampton by Hilton St. Thomas</option>\n'
+          anchor = '              <option value="ritz-carlton-st-thomas">The Ritz-Carlton, St. Thomas</option>\n'
+          if 'value="hampton-by-hilton-st-thomas"' in text:
+              raise SystemExit('Hampton by Hilton already exists; refusing duplicate update.')
+          count = text.count(anchor)
+          if count != 2:
+              raise SystemExit(f'Expected Ritz anchor twice for pickup/drop-off, found {count}.')
+          text = text.replace(anchor, option + anchor)
+          path.write_text(text, encoding='utf-8')
+
+      - name: Validate both selectors
+        shell: python
+        run: |
+          from pathlib import Path
+          text = Path('index.html').read_text(encoding='utf-8')
+          count = text.count('value="hampton-by-hilton-st-thomas"')
+          assert count == 2, f'Expected Hampton option twice, found {count}'
+          assert text.count('Hampton by Hilton St. Thomas') >= 2
+          print('PASS: Hampton by Hilton is present in pickup and drop-off lists.')
+
+      - name: Commit update
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git diff --cached --quiet && exit 0
+          git commit -m "Add Hampton by Hilton St. Thomas to route selectors"
+          git push
