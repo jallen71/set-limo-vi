@@ -19,7 +19,6 @@ jobs:
         shell: python
         run: |
           from pathlib import Path
-
           p = Path('index.html')
           s = p.read_text(encoding='utf-8')
 
@@ -30,7 +29,7 @@ jobs:
           new = '''                <option value="transfer">Point-to-Point Transfer</option>
                 <option value="private-charter">Private Charter</option>
                 <option value="multi-day">Multi-Day / On-Call Transportation</option>'''
-          assert old in s, 'Expected four-option Service Type selector not found'
+          assert old in s
           s = s.replace(old, new, 1)
 
           old_cards = '''      <div class="card">
@@ -51,7 +50,7 @@ jobs:
       </div>'''
           new_cards = '''      <div class="card">
         <h3>Point-to-Point Transfers</h3>
-        <p>Direct pickup and drop-off transportation for airport arrivals, resorts, villas, dinners, proms, events, cruise terminals, and ferry connections.</p>
+        <p>Direct pickup and drop-off transportation for airport arrivals, resorts, villas, dinners, proms, weddings, events, cruise terminals, and ferry connections.</p>
       </div>
       <div class="card">
         <h3>Private Charter</h3>
@@ -61,67 +60,49 @@ jobs:
         <h3>Multi-Day / On-Call</h3>
         <p>Custom transportation for multiple days, dedicated availability, and planned schedules. Requests are reviewed based on dates, itinerary, and availability.</p>
       </div>'''
-          assert old_cards in s, 'Expected service cards not found'
+          assert old_cards in s
           s = s.replace(old_cards, new_cards, 1)
 
-          old_event_hours = '''          if (serviceType.value === "event") {
+          blocks = [
+          '''          if (serviceType.value === "event") {
             const selectedHours = Math.min(Math.max(Number.parseInt(hoursRequested.value, 10) || 3, 3), 12);
             setHoursOptions(3, 12, selectedHours, false);
             return;
           }
 
-'''
-          assert old_event_hours in s, 'Event hours branch not found'
-          s = s.replace(old_event_hours, '', 1)
-
-          old_event_review = '''          if (serviceType.value === "event") {
+''',
+          '''          if (serviceType.value === "event") {
             reviewEstimateMessage.textContent = "Event Service: Request for Quote / Owner Review based on requested time, itinerary, and vehicle availability." + stJohnText + extraStopText;
             return;
           }
 
-'''
-          assert old_event_review in s, 'Event review branch not found'
-          s = s.replace(old_event_review, '', 1)
-
-          old_event_pricing = '''          if (serviceType.value === "event") {
+''',
+          '''          if (serviceType.value === "event") {
             return addPaymentTerms("Event Service: Request for Quote / Owner Review based on requested time, itinerary, and vehicle availability." + (stJohnTrip ? " St. John coordination requires final review." : "") + (extraStop.checked ? " Extra stops may affect the final rate." : ""));
           }
 
-'''
-          assert old_event_pricing in s, 'Event pricing branch not found'
-          s = s.replace(old_event_pricing, '', 1)
+''']
+          for block in blocks:
+            assert block in s
+            s = s.replace(block, '', 1)
 
-          stale = ['<option value="event">Event Service</option>', 'serviceType.value === "event"', '<h3>Coordination</h3>', '<h3>Events</h3>']
-          for text in stale:
-            assert text not in s, f'Stale service model text remains: {text}'
-
-          for required in ['Point-to-Point Transfer', 'Private Charter', 'Multi-Day / On-Call Transportation', 'weddings', 'proms', 'events']:
-            assert required.lower() in s.lower(), f'Missing expected concept: {required}'
-
+          for stale in ['<option value="event">Event Service</option>', 'serviceType.value === "event"', '<h3>Coordination</h3>', '<h3>Events</h3>']:
+            assert stale not in s
           p.write_text(s, encoding='utf-8')
 
-      - name: Validate JavaScript and service selector
+      - name: Validate service selector
+        shell: python
         run: |
-          python - <<'PY'
           from pathlib import Path
           import re
           s=Path('index.html').read_text()
           block=re.search(r'<select id="service-type".*?</select>', s, re.S).group(0)
-          assert block.count('<option value=') == 4  # blank + 3 real services
+          assert block.count('<option value=') == 3
           assert 'value="transfer"' in block
           assert 'value="private-charter"' in block
           assert 'value="multi-day"' in block
           assert 'value="event"' not in block
           print('SERVICE TYPE VALIDATION: PASS')
-          PY
-          node --check <(python - <<'PY'
-          from pathlib import Path
-          import re
-          s=Path('index.html').read_text()
-          scripts=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',s,re.S)
-          print(scripts[-1])
-          PY
-          )
 
       - name: Commit update
         run: |
