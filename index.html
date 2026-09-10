@@ -976,8 +976,8 @@
         <p>Ferry-aligned pickups, terminal transfers, Red Hook timing, and St. John requests handled through direct confirmation.</p>
       </div>
       <div class="card">
-        <h3>Chauffeur</h3>
-        <p>Reserved private vehicle and driver service for dinners, business movement, hourly service, daily service, VIP needs, and controlled multi-stop plans.</p>
+        <h3>Private Charter</h3>
+        <p>Reserved luxury van and driver service for multi-stop plans, business movement, dinners, and VIP needs. $600 includes up to 5 hours; additional time is $120 per hour. Reserved charter time runs continuously through final release.</p>
       </div>
       <div class="card">
         <h3>Events</h3>
@@ -1037,11 +1037,10 @@
             <div class="select-wrap service-select-wrap">
               <select id="service-type" name="service-type" required>
                 <option value="" disabled selected hidden></option>
-                <option value="transfer">Transfer</option>
-                <option value="private-chauffeur">Chauffeur</option>
+                <option value="transfer">Point-to-Point Transfer</option>
+                <option value="private-charter">Private Charter</option>
                 <option value="event">Event Service</option>
-                <option value="hourly-rental">Hourly Service</option>
-                <option value="daily-rental">Daily Service</option>
+                <option value="multi-day">Multi-Day / On-Call Transportation</option>
               </select>
             </div>
             <div id="hours-requested-row" class="select-wrap hours-select-wrap" style="display: none;">
@@ -1269,8 +1268,9 @@
       const MAX_PASSENGERS = 6;
       const EXTRA_PASSENGER_RATE_STANDARD = 25;
       const EXTRA_PASSENGER_RATE_ST_JOHN = 100;
-      const HOURLY_RATE = 125;
-      const HOURLY_MINIMUM_HOURS = 3;
+      const CHARTER_MINIMUM = 600;
+      const CHARTER_INCLUDED_HOURS = 5;
+      const CHARTER_OVERTIME_RATE = 120;
       const AIRPORT_VALUE = "cyril-e-king-airport";
       const ST_JOHN_VALUE = "st-john";
       const CUSTOM_LOCATION_VALUES = ["hotel-resort-not-listed", "villa-private-residence", "other"];
@@ -1312,7 +1312,7 @@
         const serviceType = options.serviceType || "transfer";
         const extraPassengerRate = stJohnTrip ? EXTRA_PASSENGER_RATE_ST_JOHN : EXTRA_PASSENGER_RATE_STANDARD;
         const extraCharge = Math.max(passengerCount - INCLUDED_PASSENGERS, 0) * extraPassengerRate;
-        const serviceMultiplier = serviceType === "hourly-rental" || serviceType === "private-chauffeur" ? 2 : serviceType === "event" ? 1.5 : serviceType === "daily-rental" ? 4 : 1;
+        const serviceMultiplier = 1;
         const roundMultiplier = roundTrip ? 2 : 1;
         const stJohnAdjustment = stJohnTrip ? ST_JOHN_ADJUSTMENT : 0;
         const total = (BASE_RATE + stJohnAdjustment + extraCharge) * serviceMultiplier * roundMultiplier;
@@ -1325,6 +1325,11 @@
           roundMultiplier,
           total
         };
+      }
+
+      function calculateCharterTotal(hours) {
+        const requestedHours = Math.max(Number.parseInt(hours, 10) || CHARTER_INCLUDED_HOURS, CHARTER_INCLUDED_HOURS);
+        return CHARTER_MINIMUM + Math.max(requestedHours - CHARTER_INCLUDED_HOURS, 0) * CHARTER_OVERTIME_RATE;
       }
 
       function getLocalDateInputValue(date) {
@@ -1384,6 +1389,9 @@
 
         const roundTrip = calculateTotal({ passengerCount: 1, stJohnTrip: false, roundTrip: true, serviceType: "transfer" });
         console.assert(roundTrip.total === 360, "Round trip standard transfer should total 360");
+
+        console.assert(calculateCharterTotal(5) === 600, "Five-hour charter should total 600");
+        console.assert(calculateCharterTotal(6) === 720, "Six-hour charter should total 720");
 
         console.assert(requiresAdditionalInstructions("other", "red-hook") === true, "Other pickup should require additional instructions");
         console.assert(requiresAdditionalInstructions("villa-private-residence", "cyril-e-king-airport") === true, "Villa pickup should require additional instructions");
@@ -1481,24 +1489,31 @@
             return;
           }
 
+          if (serviceType.value === "multi-day") {
+            hoursRequestedRow.style.display = "none";
+            hoursRequested.required = false;
+            hoursRequested.disabled = true;
+            hoursRequested.value = "";
+            return;
+          }
+
           hoursRequestedRow.style.display = "block";
           hoursRequested.required = true;
 
-          if (serviceType.value === "hourly-rental" || serviceType.value === "event" || serviceType.value === "private-chauffeur") {
-            const selectedHours = Math.min(Math.max(Number.parseInt(hoursRequested.value, 10) || 3, 3), 6);
-            setHoursOptions(3, 6, selectedHours, false);
+          if (serviceType.value === "private-charter") {
+            const selectedHours = Math.min(Math.max(Number.parseInt(hoursRequested.value, 10) || CHARTER_INCLUDED_HOURS, CHARTER_INCLUDED_HOURS), 12);
+            setHoursOptions(CHARTER_INCLUDED_HOURS, 12, selectedHours, false);
+            return;
+          }
+
+          if (serviceType.value === "event") {
+            const selectedHours = Math.min(Math.max(Number.parseInt(hoursRequested.value, 10) || 3, 3), 12);
+            setHoursOptions(3, 12, selectedHours, false);
             return;
           }
 
           if (serviceType.value === "transfer") {
             setHoursOptions(stJohnTrip ? 3 : 2, stJohnTrip ? 3 : 2, stJohnTrip ? 3 : 2, true);
-            return;
-          }
-
-          if (serviceType.value === "daily-rental") {
-            const selectedHours = Math.min(Math.max(Number.parseInt(hoursRequested.value, 10) || 5, 5), 8);
-            setHoursOptions(5, 8, selectedHours, false);
-            return;
           }
         }
 
@@ -1538,24 +1553,27 @@
         }
 
         function updateReviewEstimateMessage() {
-          if (serviceType.value === "hourly-rental" || serviceType.value === "event" || serviceType.value === "private-chauffeur") {
-            const selectedHours = Math.min(Math.max(Number.parseInt(hoursRequested.value, 10) || HOURLY_MINIMUM_HOURS, HOURLY_MINIMUM_HOURS), 6);
-            const selectedHourEstimate = selectedHours * HOURLY_RATE;
-            const stJohnText = isStJohnRoute(pickup.value, dropoff.value) ? " St. John coordination requires final review." : "";
-            const extraStopText = extraStop.checked ? " Extra stops may affect the final rate." : "";
-            const serviceLabel = serviceType.value === "private-chauffeur" ? "Chauffeur" : serviceType.value === "event" ? "Event service" : "Hourly service";
-            reviewEstimateMessage.textContent = serviceLabel + " starts at $" + (HOURLY_RATE * HOURLY_MINIMUM_HOURS) + " minimum. Selected estimate: $" + selectedHourEstimate + " for " + selectedHours + " hours at $" + HOURLY_RATE + "/hr." + stJohnText + extraStopText;
+          const stJohnText = isStJohnRoute(pickup.value, dropoff.value) ? " St. John coordination requires final review." : "";
+          const extraStopText = extraStop.checked ? " Extra stops may affect the final rate." : "";
+
+          if (serviceType.value === "private-charter") {
+            const selectedHours = Math.min(Math.max(Number.parseInt(hoursRequested.value, 10) || CHARTER_INCLUDED_HOURS, CHARTER_INCLUDED_HOURS), 12);
+            const selectedEstimate = calculateCharterTotal(selectedHours);
+            reviewEstimateMessage.textContent = "Private Charter: $600 minimum includes up to 5 continuous reserved hours. Selected estimate: $" + selectedEstimate + " for " + selectedHours + " hours. Additional time after 5 hours is $120/hr ($60 per half hour). Ordinary waiting during the reserved charter period is included. Charter time continues until final release." + stJohnText + extraStopText;
             return;
           }
 
-          if (serviceType.value === "daily-rental") {
-            const stJohnText = isStJohnRoute(pickup.value, dropoff.value) ? " St. John coordination requires final review." : "";
-            const extraStopText = extraStop.checked ? " Extra stops may affect the final rate." : "";
-            reviewEstimateMessage.textContent = "Daily service is reviewed by requested time, itinerary, and vehicle availability." + stJohnText + extraStopText;
+          if (serviceType.value === "multi-day") {
+            reviewEstimateMessage.textContent = "Multi-Day / On-Call Transportation: Request for Quote / Owner Review. Pricing is based on the proposed dates, availability window, and itinerary." + stJohnText + extraStopText;
             return;
           }
 
-          reviewEstimateMessage.textContent = "Chauffeur, event, hourly, and daily requests are reviewed by time and itinerary.";
+          if (serviceType.value === "event") {
+            reviewEstimateMessage.textContent = "Event Service: Request for Quote / Owner Review based on requested time, itinerary, and vehicle availability." + stJohnText + extraStopText;
+            return;
+          }
+
+          reviewEstimateMessage.textContent = "Standard St. Thomas point-to-point transfer starts at $180.";
         }
 
         function updatePrice() {
@@ -1691,26 +1709,19 @@
 
         function getPricingText() {
           const stJohnTrip = isStJohnRoute(pickup.value, dropoff.value);
-          const reviewBasedService = serviceType.value && serviceType.value !== "transfer";
 
-          if (reviewBasedService && (serviceType.value === "hourly-rental" || serviceType.value === "event" || serviceType.value === "private-chauffeur") && stJohnTrip) {
-            const selectedHours = Math.min(Math.max(Number.parseInt(hoursRequested.value, 10) || HOURLY_MINIMUM_HOURS, HOURLY_MINIMUM_HOURS), 6);
-            const selectedHourEstimate = selectedHours * HOURLY_RATE;
-            return addPaymentTerms((serviceType.value === "private-chauffeur" ? "Chauffeur" : serviceType.value === "event" ? "Event service" : "Hourly service") + " starts at $" + (HOURLY_RATE * HOURLY_MINIMUM_HOURS) + " minimum. Selected estimate: $" + selectedHourEstimate + " for " + selectedHours + " hours at $" + HOURLY_RATE + "/hr. St. John coordination requires final review." + (extraStop.checked ? " Extra stops may affect the final rate." : ""));
+          if (serviceType.value === "private-charter") {
+            const selectedHours = Math.min(Math.max(Number.parseInt(hoursRequested.value, 10) || CHARTER_INCLUDED_HOURS, CHARTER_INCLUDED_HOURS), 12);
+            const selectedEstimate = calculateCharterTotal(selectedHours);
+            return addPaymentTerms("Private Charter: $600 minimum includes up to 5 continuous reserved hours. Selected estimate: $" + selectedEstimate + " for " + selectedHours + " hours. Additional time after 5 hours is $120/hr ($60 per half hour). Ordinary waiting during the reserved charter period is included. Charter time continues until final release." + (stJohnTrip ? " St. John coordination requires final review." : "") + (extraStop.checked ? " Extra stops may affect the final rate." : ""));
           }
 
-          if (reviewBasedService && (serviceType.value === "hourly-rental" || serviceType.value === "event" || serviceType.value === "private-chauffeur")) {
-            const selectedHours = Math.min(Math.max(Number.parseInt(hoursRequested.value, 10) || HOURLY_MINIMUM_HOURS, HOURLY_MINIMUM_HOURS), 6);
-            const selectedHourEstimate = selectedHours * HOURLY_RATE;
-            return addPaymentTerms((serviceType.value === "private-chauffeur" ? "Chauffeur" : serviceType.value === "event" ? "Event service" : "Hourly service") + " starts at $" + (HOURLY_RATE * HOURLY_MINIMUM_HOURS) + " minimum. Selected estimate: $" + selectedHourEstimate + " for " + selectedHours + " hours at $" + HOURLY_RATE + "/hr." + (extraStop.checked ? " Extra stops may affect the final rate." : ""));
+          if (serviceType.value === "multi-day") {
+            return addPaymentTerms("Multi-Day / On-Call Transportation: Request for Quote / Owner Review. Pricing is based on proposed dates, availability window, itinerary, and vehicle availability." + (stJohnTrip ? " St. John coordination requires final review." : "") + (extraStop.checked ? " Extra stops may affect the final rate." : ""));
           }
 
-          if (reviewBasedService && stJohnTrip) {
-            return addPaymentTerms("Daily service is reviewed by requested time, itinerary, vehicle availability, and St. John coordination." + (extraStop.checked ? " Extra stops may affect the final rate." : ""));
-          }
-
-          if (reviewBasedService) {
-            return addPaymentTerms("Daily service is reviewed by requested time, itinerary, and vehicle availability." + (extraStop.checked ? " Extra stops may affect the final rate." : ""));
+          if (serviceType.value === "event") {
+            return addPaymentTerms("Event Service: Request for Quote / Owner Review based on requested time, itinerary, and vehicle availability." + (stJohnTrip ? " St. John coordination requires final review." : "") + (extraStop.checked ? " Extra stops may affect the final rate." : ""));
           }
 
           if (stJohnTrip && extraStop.checked) {
@@ -1757,7 +1768,7 @@
             hours_requested: hoursRequested.value ? hoursRequested.value + (hoursRequested.value === "1" ? " hour" : " hours") : "",
             policy_agreed: "Not applicable.",
             payment_terms: PAYMENT_TERMS,
-            manual_confirmation_required: isStJohnRoute(pickup.value, dropoff.value) ? "Yes" : "No",
+            manual_confirmation_required: (serviceType.value !== "transfer" || isStJohnRoute(pickup.value, dropoff.value)) ? "Yes" : "No",
             to_email: getFieldValue(email.value, ""),
             customer_email: getFieldValue(email.value, ""),
             reply_to: getFieldValue(email.value, ""),
