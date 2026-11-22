@@ -1,4 +1,4 @@
-name: FleetCommand core tests
+name: FleetCommand core and PostgreSQL tests
 on:
   push:
     paths:
@@ -9,12 +9,45 @@ on:
       - 'fleetcommand/**'
       - '.github/workflows/fleetcommand-tests.yml'
 jobs:
-  test:
+  unit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - run: npm install --no-audit --no-fund
+        working-directory: fleetcommand
       - run: npm test
+        working-directory: fleetcommand
+  postgres-integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: fleetcommand_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: fictional-admin-test-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d fleetcommand_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      FC_TEST_ADMIN_URL: postgresql://postgres:fictional-admin-test-only@127.0.0.1:5432/fleetcommand_test
+      FC_TEST_AUTH_URL: postgresql://fc_auth_test:fictional-auth-test-only@127.0.0.1:5432/fleetcommand_test
+      FC_TEST_OPS_URL: postgresql://fc_ops_test:fictional-ops-test-only@127.0.0.1:5432/fleetcommand_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+        working-directory: fleetcommand
+      - run: node tests/integration/setup.mjs
+        working-directory: fleetcommand
+      - run: node --test tests/integration/postgres.test.js
         working-directory: fleetcommand
