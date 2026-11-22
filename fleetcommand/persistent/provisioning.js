@@ -17,18 +17,18 @@ export class OperatorProvisioner{
   try{await client.query('BEGIN');const result=await fn(client);await client.query('COMMIT');return result;}
   catch(err){await client.query('ROLLBACK');throw err;}finally{client.release();}
  }
- async createOperator({businessName,ownerEmail,ownerPassword,reason,performedBy}){
+ async createOperator({businessName,ownerEmail,ownerPassword,reason,performedBy,invitation=false}){
   const actor=requireOperatorIdentity(performedBy);
   ensureReason(reason);
   const name=String(businessName||'').trim(),email=cleanEmail(ownerEmail);
   if(name.length<2||name.length>150||!validEmail(email))throw Error('Invalid business or owner email');
-  const secret=await passwordRecord(ownerPassword);
+  const secret=await passwordRecord(invitation?randomBytes(48).toString('hex'):ownerPassword);
   return this.transaction(async db=>{
    const op=(await db.query('INSERT INTO fc_operators(name) VALUES($1) RETURNING id,name',[name])).rows[0];
-   const user=(await db.query(`INSERT INTO fc_users(operator_id,email,password_salt,password_hash,role)
-     VALUES($1,$2,$3,$4,'OWNER') RETURNING id,email,role`,[op.id,email,secret.salt,secret.hash])).rows[0];
+   const user=(await db.query(`INSERT INTO fc_users(operator_id,email,password_salt,password_hash,role,email_verified)
+     VALUES($1,$2,$3,$4,'OWNER',$5) RETURNING id,email,role`,[op.id,email,secret.salt,secret.hash,!invitation])).rows[0];
    await db.query("INSERT INTO fc_admin_events(operator_id,subject_user_id,operation,performed_by,reason) VALUES($1,$2,'OPERATOR_CREATED',$3,$4)",[op.id,user.id,actor,reason.trim()]);
-   return {operatorId:op.id,businessName:op.name,owner:{id:user.id,email:user.email,role:user.role}};
+   return {operatorId:op.id,businessName:op.name,owner:{id:user.id,email:user.email,role:user.role},activationRequired:!!invitation};
   });
  }
  async addUser({operatorId,email,password,role,reason,performedBy}){
