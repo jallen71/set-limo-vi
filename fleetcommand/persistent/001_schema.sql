@@ -93,6 +93,29 @@ CREATE TABLE IF NOT EXISTS fc_admin_events (
  reason text NOT NULL CHECK(length(trim(reason))>=12),
  occurred_at timestamptz NOT NULL DEFAULT now()
 );
+-- Customer booking intake is kept separate until a dispatcher accepts it.
+CREATE TABLE IF NOT EXISTS fc_public_links (
+ operator_id uuid PRIMARY KEY REFERENCES fc_operators(id),
+ token_hash text NOT NULL UNIQUE,
+ enabled boolean NOT NULL DEFAULT true,
+ rotated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS fc_public_requests (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+ operator_id uuid NOT NULL REFERENCES fc_operators(id),
+ customer_name text NOT NULL,
+ email text NOT NULL,
+ pickup text NOT NULL,
+ dropoff text NOT NULL,
+ starts_at timestamptz NOT NULL,
+ ends_at timestamptz NOT NULL,
+ passengers integer NOT NULL CHECK(passengers BETWEEN 1 AND 50),
+ status text NOT NULL DEFAULT 'PENDING' CHECK(status IN ('PENDING','ACCEPTED','DECLINED')),
+ booking_id uuid,
+ created_at timestamptz NOT NULL DEFAULT now(),
+ CHECK(ends_at>starts_at),
+ FOREIGN KEY(operator_id,booking_id) REFERENCES fc_bookings(operator_id,id)
+);
 -- Billing events are updated exclusively by a separate restricted webhook role.
 CREATE TABLE IF NOT EXISTS fc_subscriptions (
  operator_id uuid PRIMARY KEY REFERENCES fc_operators(id),
@@ -113,18 +136,26 @@ CREATE TABLE IF NOT EXISTS fc_billing_events (
 );
 -- Only the backend login path may inspect global account records.
 -- All operational queries execute under a distinct, non-owner, non-BYPASSRLS database role.
+ALTER TABLE fc_public_links ENABLE ROW LEVEL SECURITY;
+ALTER TABLE fc_public_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fc_drivers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fc_vehicles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fc_bookings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fc_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE fc_public_links FORCE ROW LEVEL SECURITY;
+ALTER TABLE fc_public_requests FORCE ROW LEVEL SECURITY;
 ALTER TABLE fc_drivers FORCE ROW LEVEL SECURITY;
 ALTER TABLE fc_vehicles FORCE ROW LEVEL SECURITY;
 ALTER TABLE fc_bookings FORCE ROW LEVEL SECURITY;
 ALTER TABLE fc_events FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS fc_public_links_tenant ON fc_public_links;
+DROP POLICY IF EXISTS fc_public_requests_tenant ON fc_public_requests;
 DROP POLICY IF EXISTS fc_drivers_tenant ON fc_drivers;
 DROP POLICY IF EXISTS fc_vehicles_tenant ON fc_vehicles;
 DROP POLICY IF EXISTS fc_bookings_tenant ON fc_bookings;
 DROP POLICY IF EXISTS fc_events_tenant ON fc_events;
+CREATE POLICY fc_public_links_tenant ON fc_public_links USING (operator_id::text=current_setting('fleetcommand.operator_id',true)) WITH CHECK (operator_id::text=current_setting('fleetcommand.operator_id',true));
+CREATE POLICY fc_public_requests_tenant ON fc_public_requests USING (operator_id::text=current_setting('fleetcommand.operator_id',true)) WITH CHECK (operator_id::text=current_setting('fleetcommand.operator_id',true));
 CREATE POLICY fc_drivers_tenant ON fc_drivers USING (operator_id::text=current_setting('fleetcommand.operator_id',true)) WITH CHECK (operator_id::text=current_setting('fleetcommand.operator_id',true));
 CREATE POLICY fc_vehicles_tenant ON fc_vehicles USING (operator_id::text=current_setting('fleetcommand.operator_id',true)) WITH CHECK (operator_id::text=current_setting('fleetcommand.operator_id',true));
 CREATE POLICY fc_bookings_tenant ON fc_bookings USING (operator_id::text=current_setting('fleetcommand.operator_id',true)) WITH CHECK (operator_id::text=current_setting('fleetcommand.operator_id',true));
