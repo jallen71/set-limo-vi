@@ -1,19 +1,50 @@
 // PostgreSQL persistence adapter. Operational calls must use a least-privilege
 // DB role; the auth pool must be a separate credential limited to users/sessions.
-import {randomBytes} from 'node:crypto';
+import {randomBytes,createHash} from 'node:crypto';
 import {hashToken,verifyPassword} from './password.js';
 import {validateBooking,transitionBooking} from '../src/domain.js';
 const assertUuid=value=>{if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value||'')))throw Error('Invalid record ID');return value;};
 export class FleetRepository{
  constructor({authPool,operationsPool}){if(!authPool||!operationsPool)throw Error('Two separate DB pools required');this.auth=authPool;this.operations=operationsPool;}
  async login(email,password){
-  if(typeof email!=='string'||typeof password!=='string'||email.length>200||password.length>256)throw Error('Invalid credentials');
-  const {rows}=await this.auth.query('SELECT id,operator_id,email,role,password_salt,password_hash,disabled FROM fc_users WHERE lower(email)=lower($1) LIMIT 1',[email.trim()]);
-  const u=rows[0];
-  if(!u||u.disabled||!await verifyPassword(password,u.password_salt,u.password_hash))throw Error('Invalid credentials');
-  const token=randomBytes(32).toString('hex');
-  await this.auth.query("INSERT INTO fc_sessions(token_hash,user_id,expires_at) VALUES($1,$2,now()+interval '8 hours')",[hashToken(token),u.id]);
-  return {token,operatorId:u.operator_id,role:u.role};
+  if(typeof email!=='string'||typeof password!=='string'||email.length>200||password.length>256)
+   throw Error('Invalid credentials');
+  const normalized=email.trim().toLowerCase();
+  if(!normalized)throw Error('Invalid credentials');
+  const emailKey=createHash('sha256').update(normalized).digest('hex');
+  const db=await this.auth.connect();
+  let outcome;
+  try{
+   await db.query('BEGIN');
+   // Per-identifier advisory lock prevents simultaneous attempts bypassing limits.
+   await db.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[emailKey]);
+   await db.query('INSERT INTO fc_login_attempts(email_key) VALUES($1) ON CONFLICT DO NOTHING',[emailKey]);
+   const attempt=(await db.query('SELECT failure_count,window_started_at,locked_until FROM fc_login_attempts WHERE email_key=$1 FOR UPDATE',[emailKey])).rows[0];
+   const now=Date.now();
+   if(attempt.locked_until&&new Date(attempt.locked_until).getTime()>now){
+    outcome={error:'Too many sign-in attempts. Try again later.'};
+   }else{
+    const fresh=now-new Date(attempt.window_started_at).getTime()>15*60*1000;
+    const {rows}=await db.query('SELECT id,operator_id,email,role,password_salt,password_hash,disabled FROM fc_users WHERE lower(email)=$1 LIMIT 1',[normalized]);
+    const user=rows[0];
+    const valid=!!user&&!user.disabled&&await verifyPassword(password,user.password_salt,user.password_hash);
+    if(!valid){
+     const count=(fresh?0:Number(attempt.failure_count))+1;
+     await db.query(`UPDATE fc_login_attempts SET failure_count=$2,window_started_at=CASE WHEN $3 THEN now() ELSE window_started_at END,
+      locked_until=CASE WHEN $2>=5 THEN now()+interval '15 minutes' ELSE NULL END WHERE email_key=$1`,[emailKey,count,fresh]);
+     outcome={error:count>=5?'Too many sign-in attempts. Try again later.':'Invalid credentials'};
+    }else{
+     const token=randomBytes(32).toString('hex');
+     await db.query("INSERT INTO fc_sessions(token_hash,user_id,expires_at) VALUES($1,$2,now()+interval '8 hours')",[hashToken(token),user.id]);
+     await db.query('DELETE FROM fc_login_attempts WHERE email_key=$1',[emailKey]);
+     outcome={token,operatorId:user.operator_id,role:user.role};
+    }
+   }
+   await db.query('COMMIT');
+  }catch(error){await db.query('ROLLBACK');throw error;}
+  finally{db.release();}
+  if(outcome.error)throw Error(outcome.error);
+  return outcome;
  }
  async actor(token){
   if(typeof token!=='string'||!/^[0-9a-f]{64}$/.test(token))throw Error('Authentication required');
