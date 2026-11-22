@@ -4,11 +4,15 @@ import {createPersistentServer} from '../persistent/server.js';
 async function harness(repo,fn){
  const server=createPersistentServer(repo);await new Promise(ok=>server.listen(0,'127.0.0.1',ok));
  const base='http://127.0.0.1:'+server.address().port;
- const call=async(path,method='GET',body,token)=>{
-  const r=await fetch(base+path,{method,headers:{...(token?{Authorization:'Bearer '+token}:{}),
-   ...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined});
+ const call=async(path,method='GET',body,session={},options={})=>{
+  const headers={...(body?{'Content-Type':'application/json'}:{}),
+   ...(method==='POST'?{Origin:options.origin||base}:{}),
+   ...(session.cookie?{Cookie:session.cookie}:{}),
+   ...(session.csrf?{'X-FleetCommand-CSRF':options.csrf||session.csrf}:{})};
+  if(options.omitOrigin)delete headers.Origin;
+  const r=await fetch(base+path,{method,headers,body:body?JSON.stringify(body):undefined});
   const data=(r.headers.get('content-type')||'').includes('json')?await r.json():await r.text();
-  return {status:r.status,data};
+  return {status:r.status,data,cookie:r.headers.get('set-cookie')};
  };
  try{return await fn(call);}finally{await new Promise(ok=>server.close(ok));}
 }
@@ -35,9 +39,12 @@ test('Authenticated gateway maps tenant bookings and events without exposing ano
  await harness(repo,async call=>{
   const login=await call('/api/login','POST',{email:'example@invalid.test',password:'fictional only'});
   assert.equal(login.status,200);
-  const list=await call('/api/bookings','GET',undefined,login.data.token);
+  assert.equal(login.data.token,undefined);
+  assert.match(login.cookie,/HttpOnly/);
+  const session={cookie:login.cookie.split(';')[0],csrf:login.data.csrf};
+  const list=await call('/api/bookings','GET',undefined,session);
   assert.equal(list.status,200);assert.equal(list.data.bookings[0].customerName,'Demo Rider');
-  const history=await call('/api/events','GET',undefined,login.data.token);
+  const history=await call('/api/events','GET',undefined,session);
   assert.equal(history.status,200);assert.equal(history.data.events[0].action,'BOOKING_CREATED');
   assert.deepEqual(calls,['tenant-a','tenant-a']);
  });
@@ -45,7 +52,30 @@ test('Authenticated gateway maps tenant bookings and events without exposing ano
 test('Gateway refuses to leak backend SQL errors',async()=>{
  const repo={actor:async()=>{throw Error('password=secret SQL connection failed');}};
  await harness(repo,async call=>{
-  const r=await call('/api/bookings','GET',undefined,'a'.repeat(64));
+  const r=await call('/api/bookings','GET',undefined,{cookie:'fc_session='+'a'.repeat(64)});
   assert.equal(r.status,500);assert.equal(r.data.error,'Internal development server error');
+ });
+});
+
+test('POST mutation requires valid same-origin CSRF and HttpOnly session cookie',async()=>{
+ const repo={
+  login:async()=>({token:'a'.repeat(64),operatorId:'tenant-a',role:'OWNER'}),
+  actor:async token=>{if(token!=='a'.repeat(64))throw Error('Authentication required');return {id:'owner-a',operator_id:'tenant-a',role:'OWNER'};},
+  createBooking:async()=>({id:'b1',operator_id:'tenant-a',status:'REQUESTED'}),
+  logout:async()=>{}
+ };
+ await harness(repo,async call=>{
+  const badOrigin=await call('/api/login','POST',{email:'x',password:'x'},{},{origin:'http://evil.invalid'});
+  assert.equal(badOrigin.status,403);
+  const login=await call('/api/login','POST',{email:'x',password:'x'});
+  assert.equal(login.status,200);
+  const cookie=login.cookie.split(';')[0],session={cookie,csrf:login.data.csrf};
+  const trip={customerName:'Fictional Person',pickup:'A',dropoff:'B',startsAt:'2026-12-12T10:00:00Z',endsAt:'2026-12-12T11:00:00Z',passengers:2};
+  assert.equal((await call('/api/bookings','POST',trip,{cookie})).status,403);
+  assert.equal((await call('/api/bookings','POST',trip,session,{origin:'http://evil.invalid'})).status,403);
+  assert.equal((await call('/api/bookings','POST',trip,session,{csrf:'bad'})).status,403);
+  assert.equal((await call('/api/bookings','POST',trip,session)).status,201);
+  const logout=await call('/api/logout','POST',undefined,session);
+  assert.equal(logout.status,200);assert.match(logout.cookie,/Max-Age=0/);
  });
 });
