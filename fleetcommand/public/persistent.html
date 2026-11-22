@@ -4,14 +4,37 @@
 <section class="panel" id="login"><h2>Operator sign-in</h2><p>Use an authorized account created in the isolated test database.</p><form id="loginForm"><label>Email<input id="email" type="email" required placeholder="Authorized email" autocomplete="username"></label><label>Password<input id="password" type="password" required autocomplete="current-password"></label><button>Sign in</button></form><p><a href="/account">Forgot password?</a></p></section>
 <section id="dashboard"><div class="row"><h2 id="company">Operator</h2><button id="logout">Sign out</button></div><section class="panel" id="newBookingPanel"><h2>New booking request</h2><form id="bookingForm"><div class="grid"><label>Customer<input name="customerName" required></label><label>Passengers<input name="passengers" type="number" min="1" max="50" value="2" required></label><label>Pickup<input name="pickup" required></label><label>Drop-off<input name="dropoff" required></label><label>Start<input name="startsAt" type="datetime-local" required></label><label>End<input name="endsAt" type="datetime-local" required></label></div><button>Create request</button></form></section>
 <section class="panel" id="resourcesPanel"><div class="row"><h2>Fleet</h2><span>Driver accounts are added by an authorized administrator</span></div><form id="vehicleForm"><div class="grid"><label>Vehicle label<input name="label" placeholder="Van 1" minlength="2" maxlength="80" required></label><label>Seats<input name="capacity" type="number" min="1" max="50" value="6" required></label></div><button>Add vehicle</button></form><p id="resourceSummary"></p></section>
-<section class="panel"><div class="row"><h2>Bookings</h2><button id="refresh">Refresh</button></div><div class="scroll"><table><thead><tr><th>Customer</th><th>Route</th><th>Pickup</th><th>Status</th><th>Action</th></tr></thead><tbody id="bookings"></tbody></table></div></section>
+<section class="panel" id="customerRequestsPanel"><div class="row"><h2>Incoming customer requests</h2><button id="shareBookingLink" type="button">Generate customer booking link</button></div>
+<p>Customer requests are pending until reviewed. No payment is taken or booking confirmed automatically.</p>
+<p id="linkOutput" style="overflow-wrap:anywhere"></p><div class="scroll"><table><thead><tr><th>Customer</th><th>Route</th><th>Trip date</th><th>Status</th><th>Review</th></tr></thead><tbody id="customerRequests"></tbody></table></div></section>
+<section class="panel"><div class="row"><h2>Bookings</h2><a id="exportCsv" href="/api/reports/bookings.csv">Export CSV</a><button id="refresh">Refresh</button></div><div class="scroll"><table><thead><tr><th>Customer</th><th>Route</th><th>Pickup</th><th>Status</th><th>Action</th></tr></thead><tbody id="bookings"></tbody></table></div></section>
 <section class="panel"><h2>Activity history</h2><ul id="events"></ul></section></section><p id="feedback" role="status"></p></main>
 <script>
 let csrf='',operatorRole='',resources={drivers:[],vehicles:[]};const el=id=>document.getElementById(id),notice=(m,b=false)=>{el('feedback').textContent=m;el('feedback').className=b?'error':'ok'};
 async function api(path,method='GET',payload){const r=await fetch('/api'+path,{method,credentials:'same-origin',headers:{...(method!=='GET'?{'X-FleetCommand-CSRF':csrf}:{}),...(payload?{'Content-Type':'application/json'}:{})},body:payload?JSON.stringify(payload):undefined});const data=await r.json();if(!r.ok)throw Error(data.error||'Request failed');return data;}
 const next={REQUESTED:'CONFIRMED',CONFIRMED:'ASSIGNED',ASSIGNED:'IN_PROGRESS',IN_PROGRESS:'COMPLETED'};
 function cell(tr,value){const td=document.createElement('td');td.textContent=String(value??'');tr.appendChild(td)}
-async function refresh(){if(operatorRole!=='DRIVER'){const resourceData=await api('/resources');resources=resourceData;el('resourceSummary').textContent=resources.drivers.length+' drivers · '+resources.vehicles.length+' vehicles'}const data=await api('/bookings');el('company').textContent=data.operator;const tbody=el('bookings');tbody.replaceChildren();
+async function refreshRequests(){
+ const result=await api('/customer-requests');const body=el('customerRequests');body.replaceChildren();
+ for(const req of result.requests){
+  const tr=document.createElement('tr');cell(tr,req.customer_name+' ('+req.email+')');
+  cell(tr,req.pickup+' → '+req.dropoff);cell(tr,new Date(req.starts_at).toLocaleString());cell(tr,req.status);
+  const td=document.createElement('td');
+  if(req.status==='PENDING'){
+   for(const action of ['ACCEPTED','DECLINED']){
+    const btn=document.createElement('button');btn.textContent=action==='ACCEPTED'?'Accept':'Decline';
+    btn.onclick=async()=>{const reason=prompt('Reason for '+action.toLowerCase()+' decision (required)');if(!reason)return;
+     try{await api('/customer-requests/'+req.id+'/decision','POST',{action,reason});
+     await refresh();notice('Customer request '+action.toLowerCase()+'. No payment or confirmation sent.');
+     }catch(e){notice(e.message,true)}};
+    td.appendChild(btn);
+   }
+  }
+  tr.appendChild(td);body.appendChild(tr);
+ }
+ if(!result.requests.length){const tr=document.createElement('tr');const td=document.createElement('td');td.colSpan=5;td.textContent='No customer requests yet';tr.appendChild(td);body.appendChild(tr)}
+}
+async function refresh(){if(operatorRole!=='DRIVER'){await refreshRequests();const resourceData=await api('/resources');resources=resourceData;el('resourceSummary').textContent=resources.drivers.length+' drivers · '+resources.vehicles.length+' vehicles'}const data=await api('/bookings');el('company').textContent=data.operator;const tbody=el('bookings');tbody.replaceChildren();
 for(const b of data.bookings){const tr=document.createElement('tr');cell(tr,b.customerName);cell(tr,b.pickup+' → '+b.dropoff);cell(tr,new Date(b.startsAt).toLocaleString());cell(tr,b.status);const td=document.createElement('td');
 if(next[b.status]&&(operatorRole!=='DRIVER'||['IN_PROGRESS','COMPLETED'].includes(next[b.status]))){const wrap=document.createElement('div');wrap.className='action-controls';
 let driver=null,vehicle=null;
@@ -34,8 +57,14 @@ btn.onclick=async()=>{try{
 wrap.appendChild(btn);td.appendChild(wrap)}
 tr.appendChild(td);tbody.appendChild(tr)}if(!data.bookings.length){const tr=document.createElement('tr');const td=document.createElement('td');td.colSpan=5;td.textContent='No bookings yet';tr.appendChild(td);tbody.appendChild(tr)}
 const events=await api('/events');el('events').replaceChildren(...events.events.slice(-15).reverse().map(e=>{const li=document.createElement('li');li.textContent=e.occurredAt+' — '+e.action+' — '+e.bookingId;return li}))}
-el('loginForm').onsubmit=async e=>{e.preventDefault();try{const r=await api('/login','POST',{email:el('email').value,password:el('password').value});csrf=r.csrf;operatorRole=r.role;el('resourcesPanel').hidden=(operatorRole==='DRIVER');el('newBookingPanel').hidden=(operatorRole==='DRIVER');el('resourcesPanel').querySelector('form').hidden=(operatorRole!=='OWNER');el('login').hidden=true;el('dashboard').style.display='block';el('password').value='';await refresh();notice('Signed into isolated development operator')}catch(err){notice(err.message,true)}};
+el('loginForm').onsubmit=async e=>{e.preventDefault();try{const r=await api('/login','POST',{email:el('email').value,password:el('password').value});csrf=r.csrf;operatorRole=r.role;el('customerRequestsPanel').hidden=(operatorRole==='DRIVER');el('exportCsv').hidden=(operatorRole==='DRIVER');el('shareBookingLink').hidden=(operatorRole!=='OWNER');el('resourcesPanel').hidden=(operatorRole==='DRIVER');el('newBookingPanel').hidden=(operatorRole==='DRIVER');el('resourcesPanel').querySelector('form').hidden=(operatorRole!=='OWNER');el('login').hidden=true;el('dashboard').style.display='block';el('password').value='';await refresh();notice('Signed into isolated development operator')}catch(err){notice(err.message,true)}};
 el('bookingForm').onsubmit=async e=>{e.preventDefault();try{const f=new FormData(e.target),x=Object.fromEntries(f);x.startsAt=new Date(x.startsAt).toISOString();x.endsAt=new Date(x.endsAt).toISOString();await api('/bookings','POST',x);e.target.reset();await refresh();notice('Test booking created')}catch(err){notice(err.message,true)}};
+el('shareBookingLink').onclick=async()=>{if(!confirm('Generate a fresh customer booking link? This disables any earlier link.'))return;
+ try{const result=await api('/public-link/rotate','POST',{});const link=document.createElement('a');
+ link.href=result.url;link.textContent=result.url;link.target='_blank';link.rel='noopener noreferrer';
+ el('linkOutput').replaceChildren(link);notice('Save or share this link. It only requests bookings, not confirmations.');
+ }catch(err){notice(err.message,true)}
+};
 el('vehicleForm').onsubmit=async e=>{e.preventDefault();try{const x=Object.fromEntries(new FormData(e.target));await api('/vehicles','POST',x);e.target.reset();await refresh();notice('Vehicle added')}catch(err){notice(err.message,true)}};
 el('refresh').onclick=()=>refresh().catch(e=>notice(e.message,true));el('logout').onclick=async()=>{try{await api('/logout','POST')}catch{}csrf='';el('dashboard').style.display='none';el('login').hidden=false;notice('Signed out')};
 </script></body></html>
