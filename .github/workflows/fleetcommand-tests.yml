@@ -52,12 +52,21 @@ jobs:
       FC_TEST_OPS_URL: postgresql://fc_ops_test:fictional-ops-test-only@127.0.0.1:5432/fleetcommand_test
       FC_TEST_RECOVERY_URL: postgresql://fc_recovery_test:fictional-recovery-test-only@127.0.0.1:5432/fleetcommand_test
       FC_TEST_GUEST_URL: postgresql://fc_guest_test:fictional-guest-test-only@127.0.0.1:5432/fleetcommand_test
+      FLEETCOMMAND_ADMIN_ACK: ISOLATED_FLEETCOMMAND_DATABASE
+      FLEETCOMMAND_ADMIN_DATABASE_URL: postgresql://postgres:fictional-admin-test-only@127.0.0.1:5432/fleetcommand_test
+      FC_AUTH_PASSWORD: fictional-auth-runtime-password-test
+      FC_OPS_PASSWORD: fictional-ops-runtime-password-test
+      FC_RECOVERY_PASSWORD: fictional-recovery-runtime-password-test
+      FC_GUEST_PASSWORD: fictional-guest-runtime-password-test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
       - run: npm install --no-audit --no-fund
+        working-directory: fleetcommand
+      - name: Exercise real isolated database bootstrap
+        run: node admin/bootstrap.mjs
         working-directory: fleetcommand
       - run: node tests/integration/setup.mjs
         working-directory: fleetcommand
