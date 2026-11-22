@@ -3,11 +3,12 @@
  * No production exposure without real database integration/security testing.
  */
 import http from 'node:http';
+import {randomBytes,timingSafeEqual} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {FleetRepository} from './repository.js';
 
-const uiPath=fileURLToPath(new URL('../public/index.html',import.meta.url));
+const uiPath=fileURLToPath(new URL('../public/persistent.html',import.meta.url));
 const send=(res,status,data)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(data));};
 async function parseBody(req){
  const chunks=[];let bytes=0;
@@ -15,6 +16,8 @@ async function parseBody(req){
  try{return JSON.parse(Buffer.concat(chunks).toString('utf8')||'{}');}catch{throw Error('Invalid JSON');}
 }
 function failure(err){
+ if(/Too many sign-in attempts/.test(err.message))return 429;
+ if(/CSRF|Origin|cross-site/.test(err.message))return 403;
  if(/Authentication required|Invalid credentials/.test(err.message))return 401;
  if(/Insufficient role/.test(err.message))return 403;
  if(/Booking not found/.test(err.message))return 404;
@@ -23,6 +26,11 @@ function failure(err){
 }
 export function createPersistentServer(repo){
  if(!repo||typeof repo.actor!=='function')throw Error('Repository is required');
+ const csrfSessions=new Map();
+ const cookieName='fc_session';
+ const cookieToken=req=>String(req.headers.cookie||'').split(';').map(x=>x.trim())
+   .find(x=>x.startsWith(cookieName+'='))?.slice(cookieName.length+1);
+ const eq=(a,b)=>{const x=Buffer.from(String(a||'')),y=Buffer.from(String(b||''));return x.length===y.length&&timingSafeEqual(x,y);};
  return http.createServer(async(req,res)=>{
   const path=new URL(req.url,'http://localhost').pathname;
   try{
@@ -37,11 +45,26 @@ export function createPersistentServer(repo){
    if(req.method==='POST'&&path==='/api/login'){
     const b=await parseBody(req);
     const session=await repo.login(b.email,b.password);
-    return send(res,200,{token:session.token,operator:session.operatorId,role:session.role});
+    const csrf=randomBytes(32).toString('hex');
+    csrfSessions.set(session.token,csrf);
+    // Secure is deliberately omitted only for localhost HTTP development; public TLS is mandatory.
+    res.setHeader('Set-Cookie',cookieName+'='+session.token+'; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800');
+    return send(res,200,{csrf,operator:session.operatorId,role:session.role});
    }
-   const raw=(req.headers.authorization||'').match(/^Bearer ([0-9a-f]{64})$/)?.[1];
+   // Ignore Authorization bearer headers: persistent browser sessions use HttpOnly cookies.
+   const raw=cookieToken(req);
    const actor=await repo.actor(raw);
-   if(req.method==='POST'&&path==='/api/logout'){await repo.logout(raw);return send(res,200,{ok:true});}
+   if(req.method!=='GET'&&req.method!=='HEAD'){
+    const origin=req.headers.origin;
+    const expected='http://'+req.headers.host;
+    if(!origin||origin!==expected||!eq(req.headers['x-fleetcommand-csrf'],csrfSessions.get(raw)))
+     throw Error('CSRF or Origin verification failed');
+   }
+   if(req.method==='POST'&&path==='/api/logout'){
+    await repo.logout(raw);csrfSessions.delete(raw);
+    res.setHeader('Set-Cookie',cookieName+'=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0');
+    return send(res,200,{ok:true});
+   }
    if(req.method==='GET'&&path==='/api/bookings'){
     const bookings=await repo.listBookings(actor);
     return send(res,200,{operator:actor.operator_id,bookings:bookings.map(row=>({
