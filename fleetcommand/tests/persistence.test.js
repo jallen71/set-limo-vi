@@ -11,7 +11,7 @@ test('credentials use unique salt and reject wrong password',async()=>{
  assert.notEqual(a.hash,b.hash);
  assert.equal(await verifyPassword('a secure test passphrase',a.salt,a.hash),true);
  assert.equal(await verifyPassword('incorrect password',a.salt,a.hash),false);
- assert.throws(()=>passwordRecord('short'));
+ await assert.rejects(()=>passwordRecord('short'));
 });
 test('session token hash is deterministic but does not reveal token',()=>{
  const token='a'.repeat(64);
