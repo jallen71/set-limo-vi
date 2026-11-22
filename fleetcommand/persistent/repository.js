@@ -63,6 +63,15 @@ export class FleetRepository{
    await client.query('COMMIT');return result;
   }catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}
  }
+ async billingSummary(actor){
+  if(actor.role!=='OWNER')throw Error('Insufficient role');
+  return this.scoped(actor,async db=>{
+   const subscription=(await db.query('SELECT plan,status,provider,current_period_end FROM fc_subscriptions WHERE operator_id=$1',[actor.operator_id])).rows[0]||null;
+   const invoices=(await db.query('SELECT id,plan,currency,amount_cents,period_start,period_end,status,issued_at,paid_at FROM fc_invoices ORDER BY issued_at DESC,id DESC LIMIT 12')).rows;
+   return {subscription:subscription||{plan:'PILOT',status:'PILOT',provider:'MANUAL'},invoices,
+    note:'Invoices are issued and reconciled by a separate authorized administrator. No online payment is collected here.'};
+  });
+ }
  async rotateCustomerBookingLink(actor){
   if(actor.role!=='OWNER')throw Error('Insufficient role');
   const token=randomBytes(32).toString('hex');
