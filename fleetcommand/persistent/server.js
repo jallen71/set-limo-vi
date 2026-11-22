@@ -56,7 +56,7 @@ export function createPersistentServer(repo,{recovery=null,deliver=null}={}){
     if(req.headers.origin!=='http://'+req.headers.host)throw Error('Origin verification failed');
     if(!recovery||!deliver)return send(res,503,{error:'Recovery email is not configured'});
     const input=await parseBody(req),email=String(input.email||'').trim().toLowerCase();
-    if(!/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(email)||email.length>200)
+    if(!/^[^@\s]+@[^@\s]+\\.[^@\s]+$/.test(email)||email.length>200)
      return send(res,400,{error:'Invalid email'});
     // Local defense only; deploy a shared network-aware limiter before exposing publicly.
     const key=email,now=Date.now(),previous=recoveryAttempts.get(key);
