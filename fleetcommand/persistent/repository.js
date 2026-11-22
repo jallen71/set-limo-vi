@@ -82,7 +82,13 @@ export class FleetRepository{
    return row;
   });
  }
- async listBookings(actor){return this.scoped(actor,async db=>(await db.query('SELECT * FROM fc_bookings ORDER BY starts_at,id')).rows);}
+ async listBookings(actor){
+  return this.scoped(actor,async db=>{
+   if(actor.role==='DRIVER')return (await db.query('SELECT * FROM fc_bookings WHERE driver_id=$1 ORDER BY starts_at,id',[actor.id])).rows;
+   if(!['OWNER','DISPATCHER'].includes(actor.role))throw Error('Insufficient role');
+   return (await db.query('SELECT * FROM fc_bookings ORDER BY starts_at,id')).rows;
+  });
+ }
  async listEvents(actor){
   return this.scoped(actor,async db=>(await db.query(
    'SELECT operator_id,booking_id,actor_id,previous_status,new_status,reason,occurred_at FROM fc_events ORDER BY occurred_at DESC,id DESC LIMIT 200'
@@ -99,7 +105,7 @@ export class FleetRepository{
   });
  }
  async transition(actor,id,input){
-  if(!['OWNER','DISPATCHER'].includes(actor.role))throw Error('Insufficient role');
+  if(!['OWNER','DISPATCHER','DRIVER'].includes(actor.role))throw Error('Insufficient role');
   assertUuid(id);
   return this.scoped(actor,async db=>{
    // Operator-wide advisory lock serializes assignments, including competing requests.
@@ -107,6 +113,16 @@ export class FleetRepository{
    const {rows}=await db.query('SELECT * FROM fc_bookings WHERE id=$1 FOR UPDATE',[id]);
    if(!rows.length)throw Error('Booking not found');
    const b=rows[0];
+   if(actor.role==='DRIVER'){
+    if(b.driver_id!==actor.id||!['IN_PROGRESS','COMPLETED'].includes(input.status))
+     throw Error('Insufficient role');
+   }
+   if(input.status==='ASSIGNED'){
+    const vehicle=(await db.query('SELECT capacity FROM fc_vehicles WHERE id=$1',[input.vehicleId])).rows[0];
+    const driver=(await db.query('SELECT user_id FROM fc_drivers WHERE user_id=$1',[input.driverId])).rows[0];
+    if(!vehicle||!driver||vehicle.capacity<b.passengers)
+     throw Error('Invalid driver, vehicle or passenger capacity');
+   }
    const list=(await db.query("SELECT * FROM fc_bookings WHERE status NOT IN ('CANCELLED','COMPLETED')")).rows;
    const normalize=x=>({id:x.id,operatorId:x.operator_id,status:x.status,startsAt:x.starts_at,
       endsAt:x.ends_at,driverId:x.driver_id,vehicleId:x.vehicle_id});
