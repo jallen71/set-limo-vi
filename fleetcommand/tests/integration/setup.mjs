@@ -18,6 +18,7 @@ try{
  await admin.query(`GRANT CONNECT ON DATABASE fleetcommand_test TO fc_auth_test,fc_ops_test;
  GRANT USAGE ON SCHEMA public TO fc_auth_test,fc_ops_test;
  GRANT SELECT ON fc_users TO fc_auth_test;
+ GRANT SELECT,INSERT,UPDATE ON fc_login_attempts TO fc_auth_test;
  GRANT SELECT,INSERT,DELETE ON fc_sessions TO fc_auth_test;
  GRANT SELECT,INSERT,UPDATE ON fc_bookings TO fc_ops_test;
  GRANT SELECT,INSERT ON fc_events TO fc_ops_test;
