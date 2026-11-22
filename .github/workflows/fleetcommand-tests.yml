@@ -51,6 +51,7 @@ jobs:
       FC_TEST_AUTH_URL: postgresql://fc_auth_test:fictional-auth-test-only@127.0.0.1:5432/fleetcommand_test
       FC_TEST_OPS_URL: postgresql://fc_ops_test:fictional-ops-test-only@127.0.0.1:5432/fleetcommand_test
       FC_TEST_RECOVERY_URL: postgresql://fc_recovery_test:fictional-recovery-test-only@127.0.0.1:5432/fleetcommand_test
+      FC_TEST_GUEST_URL: postgresql://fc_guest_test:fictional-guest-test-only@127.0.0.1:5432/fleetcommand_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
