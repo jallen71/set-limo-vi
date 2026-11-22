@@ -124,6 +124,10 @@ export function createPersistentServer(repo,{recovery=null,deliver=null,guest=nu
     res.setHeader('Set-Cookie',cookieName+'=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0'+(publicOrigin?'; Secure':''));
     return send(res,200,{ok:true});
    }
+   if(req.method==='GET'&&path==='/api/billing'){
+    const billing=await repo.billingSummary(actor);
+    return send(res,200,billing);
+   }
    if(req.method==='POST'&&path==='/api/public-link/rotate'){
     const link=await repo.rotateCustomerBookingLink(actor);
     return send(res,200,{url:expectedOrigin(req)+'/book/'+link.token,warning:link.warning});
