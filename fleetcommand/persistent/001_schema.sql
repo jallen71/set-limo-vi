@@ -154,7 +154,7 @@ DROP POLICY IF EXISTS fc_drivers_tenant ON fc_drivers;
 DROP POLICY IF EXISTS fc_vehicles_tenant ON fc_vehicles;
 DROP POLICY IF EXISTS fc_bookings_tenant ON fc_bookings;
 DROP POLICY IF EXISTS fc_events_tenant ON fc_events;
-CREATE POLICY fc_public_links_tenant ON fc_public_links USING (operator_id::text=current_setting('fleetcommand.operator_id',true)) WITH CHECK (operator_id::text=current_setting('fleetcommand.operator_id',true));
+CREATE POLICY fc_public_links_tenant ON fc_public_links USING (operator_id::text=current_setting('fleetcommand.operator_id',true) OR current_user='fc_guest_app' OR current_user='fc_guest_test') WITH CHECK (operator_id::text=current_setting('fleetcommand.operator_id',true));
 CREATE POLICY fc_public_requests_tenant ON fc_public_requests USING (operator_id::text=current_setting('fleetcommand.operator_id',true)) WITH CHECK (operator_id::text=current_setting('fleetcommand.operator_id',true));
 CREATE POLICY fc_drivers_tenant ON fc_drivers USING (operator_id::text=current_setting('fleetcommand.operator_id',true)) WITH CHECK (operator_id::text=current_setting('fleetcommand.operator_id',true));
 CREATE POLICY fc_vehicles_tenant ON fc_vehicles USING (operator_id::text=current_setting('fleetcommand.operator_id',true)) WITH CHECK (operator_id::text=current_setting('fleetcommand.operator_id',true));
