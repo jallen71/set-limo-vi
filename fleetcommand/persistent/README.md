@@ -80,3 +80,25 @@ database rights to the web server.
 protection; email verification; password recovery; secure browser cookie
 sessions and CSRF protections; approved initial admin provisioning; staging
 deployment and Android device tests.
+
+## Browser login-hardening milestone (development branch)
+
+- Account-level failed-login attempts are stored by SHA-256 email identifier in
+  PostgreSQL, serialized with an advisory lock, with a 5-attempt / 15-minute
+  lockout window. Account lockout can also be triggered maliciously, so a
+  production login service still needs an IP/network-level abuse defense.
+- The persistent gateway now uses a SameSite=Strict, HttpOnly session cookie;
+  the bearer token is no longer returned to the browser for that gateway.
+  The original **fictional local demo** remains unchanged.
+- The persistent browser UI sends a CSRF header; the gateway checks it
+  against the authenticated session and checks the exact same-origin request.
+- This build binds to localhost HTTP only. The cookie deliberately lacks
+  Secure in development; a real TLS-only deployment must add Secure cookies,
+  a trusted-host proxy configuration, and a distributable session/CSRF store.
+- The CSRF binding is in server memory, so gateway restarts require fresh login.
+  This is an intentional development limitation, not production session design.
+- Authenticated operator creation remains offline-only. No email activation
+  or password recovery mechanism is present.
+
+Do not expose this development server publicly. Validate complete browser
+behavior and multi-replica session behavior before commercial release.
