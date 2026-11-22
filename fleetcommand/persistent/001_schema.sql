@@ -93,6 +93,24 @@ CREATE TABLE IF NOT EXISTS fc_admin_events (
  reason text NOT NULL CHECK(length(trim(reason))>=12),
  occurred_at timestamptz NOT NULL DEFAULT now()
 );
+-- Billing events are updated exclusively by a separate restricted webhook role.
+CREATE TABLE IF NOT EXISTS fc_subscriptions (
+ operator_id uuid PRIMARY KEY REFERENCES fc_operators(id),
+ provider text NOT NULL DEFAULT 'STRIPE',
+ provider_customer_id text UNIQUE,
+ provider_subscription_id text UNIQUE,
+ plan text NOT NULL DEFAULT 'PILOT' CHECK(plan IN ('PILOT','STARTER','BUSINESS','PRO')),
+ status text NOT NULL DEFAULT 'PILOT' CHECK(status IN ('PILOT','INCOMPLETE','TRIALING','ACTIVE','PAST_DUE','UNPAID','CANCELED')),
+ current_period_end timestamptz,
+ last_event_at timestamptz,
+ updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS fc_billing_events (
+ provider_event_id text PRIMARY KEY,
+ event_type text NOT NULL,
+ event_created_at timestamptz NOT NULL,
+ processed_at timestamptz NOT NULL DEFAULT now()
+);
 -- Only the backend login path may inspect global account records.
 -- All operational queries execute under a distinct, non-owner, non-BYPASSRLS database role.
 ALTER TABLE fc_drivers ENABLE ROW LEVEL SECURITY;
