@@ -59,3 +59,24 @@ test-account setup and database permission validation remain prerequisites.
   real operator UX and Android device testing are incomplete.
 - Do not merge as an internet-facing deployment and do not point at the
   live SET booking system or its customer data.
+
+## Offline operator onboarding (development only)
+
+`provisioning.js` adds an explicitly offline-only `OperatorProvisioner`
+for creating an operator with its first OWNER, adding authorized staff, and
+disabling accounts while revoking their sessions. Passwords are salted and
+hashed; no password is returned. Each operation requires a named administrative
+actor and a correction reason, and writes to `fc_admin_events` in the same
+transaction. The operational and login database roles have no access to that
+audit table. All tests use fictional customers.
+
+This is **not** a public invitation or self-signup endpoint. There is no
+user-facing onboarding yet. Production provisioning requires an authorized
+admin interface, privileged credential management, user identity verification,
+and operational policy for restoring owner access. Do not grant administrative
+database rights to the web server.
+
+**Still blocking public launch:** login rate-limiting and brute-force
+protection; email verification; password recovery; secure browser cookie
+sessions and CSRF protections; approved initial admin provisioning; staging
+deployment and Android device tests.
