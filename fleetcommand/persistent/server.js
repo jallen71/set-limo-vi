@@ -99,6 +99,14 @@ export function createPersistentServer(repo,{recovery=null,deliver=null}={}){
     res.setHeader('Set-Cookie',cookieName+'=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0');
     return send(res,200,{ok:true});
    }
+   if(req.method==='GET'&&path==='/api/resources'){
+    const resources=await repo.listResources(actor);
+    return send(res,200,resources);
+   }
+   if(req.method==='POST'&&path==='/api/vehicles'){
+    const vehicle=await repo.addVehicle(actor,await parseBody(req));
+    return send(res,201,{vehicle});
+   }
    if(req.method==='GET'&&path==='/api/bookings'){
     const bookings=await repo.listBookings(actor);
     return send(res,200,{operator:actor.operator_id,bookings:bookings.map(row=>({
