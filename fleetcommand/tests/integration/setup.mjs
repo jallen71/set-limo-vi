@@ -17,14 +17,22 @@ try{
    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='fc_recovery_test') THEN
      CREATE ROLE fc_recovery_test LOGIN PASSWORD 'fictional-recovery-test-only';
    END IF;
+   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='fc_guest_test') THEN
+     CREATE ROLE fc_guest_test LOGIN PASSWORD 'fictional-guest-test-only';
+   END IF;
  END $$;`);
- await admin.query(`GRANT CONNECT ON DATABASE fleetcommand_test TO fc_auth_test,fc_ops_test,fc_recovery_test;
+ await admin.query(`GRANT CONNECT ON DATABASE fleetcommand_test TO fc_auth_test,fc_ops_test,fc_recovery_test,fc_guest_test;
  GRANT USAGE ON SCHEMA public TO fc_auth_test,fc_ops_test,fc_recovery_test;
  GRANT SELECT ON fc_users TO fc_auth_test;
  GRANT SELECT,INSERT,UPDATE,DELETE ON fc_login_attempts TO fc_auth_test;
  GRANT SELECT,INSERT,DELETE ON fc_sessions TO fc_auth_test;
  GRANT SELECT,INSERT,UPDATE ON fc_bookings TO fc_ops_test;
  GRANT SELECT ON fc_drivers TO fc_ops_test;
+ GRANT SELECT,INSERT,UPDATE ON fc_public_links TO fc_ops_test;
+ GRANT SELECT,UPDATE ON fc_public_requests TO fc_ops_test;
+ GRANT SELECT,INSERT ON fc_intake_events TO fc_ops_test;
+ GRANT SELECT ON fc_public_links TO fc_guest_test;
+ GRANT INSERT,SELECT(id,status) ON fc_public_requests TO fc_guest_test;
  GRANT SELECT,INSERT ON fc_events TO fc_ops_test;
  GRANT SELECT,INSERT ON fc_vehicles TO fc_ops_test;
  GRANT SELECT ON fc_users TO fc_recovery_test;
