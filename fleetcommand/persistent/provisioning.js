@@ -3,6 +3,7 @@
  * Passwords are supplied by the authorized provisioning caller and never returned.
  */
 import {passwordRecord} from './password.js';
+import {randomBytes} from 'node:crypto';
 
 const cleanEmail=s=>String(s||'').trim().toLowerCase();
 const validEmail=s=>/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s)&&s.length<=200;
@@ -43,6 +44,24 @@ export class OperatorProvisioner{
      VALUES($1,$2,$3,$4,$5) RETURNING id,email,role`,[operatorId,address,secret.salt,secret.hash,role])).rows[0];
    await db.query("INSERT INTO fc_admin_events(operator_id,subject_user_id,operation,performed_by,reason) VALUES($1,$2,'USER_CREATED',$3,$4)",[operatorId,user.id,actor,reason.trim()]);
    return {id:user.id,email:user.email,role:user.role,operatorId};
+  });
+ }
+ /** Create a pending invited user with no usable password until activation. */
+ async inviteUser({operatorId,email,role,reason,performedBy}){
+  const actor=requireOperatorIdentity(performedBy);
+  ensureReason(reason);
+  const address=cleanEmail(email);
+  if(!validEmail(address)||!roles.has(role)||!operatorId)throw Error('Invalid invited user');
+  const unusablePassword=await passwordRecord(randomBytes(48).toString('hex'));
+  return this.transaction(async db=>{
+   const found=await db.query('SELECT id FROM fc_operators WHERE id=$1 FOR UPDATE',[operatorId]);
+   if(found.rows.length!==1)throw Error('Operator not found');
+   const user=(await db.query(`INSERT INTO fc_users(operator_id,email,password_salt,password_hash,role,email_verified)
+    VALUES($1,$2,$3,$4,$5,false) RETURNING id,email,role`,
+    [operatorId,address,unusablePassword.salt,unusablePassword.hash,role])).rows[0];
+   await db.query("INSERT INTO fc_admin_events(operator_id,subject_user_id,operation,performed_by,reason) VALUES($1,$2,'USER_CREATED',$3,$4)",
+    [operatorId,user.id,actor,reason.trim()]);
+   return {id:user.id,operatorId,email:user.email,role:user.role,activationRequired:true};
   });
  }
  async disableUser({operatorId,userId,reason,performedBy}){
