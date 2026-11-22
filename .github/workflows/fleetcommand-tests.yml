@@ -49,5 +49,5 @@ jobs:
         working-directory: fleetcommand
       - run: node tests/integration/setup.mjs
         working-directory: fleetcommand
-      - run: node --test tests/integration/postgres.test.js
+      - run: node --test --test-concurrency=1 tests/integration/*.test.js
         working-directory: fleetcommand
