@@ -30,6 +30,24 @@ services:
         condition: service_healthy
     networks: [data]
     restart: "no"
+  invite-test-admin:
+    profiles: [onboarding]
+    build: .
+    command: ["node","admin/invite-pilot.mjs"]
+    environment:
+      FLEETCOMMAND_ADMIN_DATABASE_URL: postgresql://fc_admin:${FC_ADMIN_PASSWORD}@database:5432/fleetcommand_pilot
+      FLEETCOMMAND_RECOVERY_DATABASE_URL: postgresql://fc_recovery_app:${FC_RECOVERY_PASSWORD}@database:5432/fleetcommand_pilot
+      FLEETCOMMAND_PILOT_INVITE_ACK: CREATE_ISOLATED_TEST_OPERATOR
+      FLEETCOMMAND_PILOT_BUSINESS: FleetCommand Pilot
+      FLEETCOMMAND_PILOT_EMAIL: testingthings@gmail.com
+      FLEETCOMMAND_RESEND_API_KEY: ${FC_RESEND_API_KEY:?Email provider API key required}
+      FLEETCOMMAND_MAIL_FROM: ${FC_VERIFIED_SENDER:?Verified email sender required}
+      FLEETCOMMAND_MAIL_BASE_URL: https://${FC_PILOT_DOMAIN:?Pilot domain required}
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+    networks: [data]
+    restart: "no"
   app:
     build: .
     environment:
