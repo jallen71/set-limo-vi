@@ -1,50 +1,33 @@
-# FleetCommand — MVP foundation
+# FleetCommand — Transportation SaaS pilot
 
-This isolated folder starts a multi-operator transportation booking/dispatch product.
-The existing SET limo website and production booking workflow remain untouched.
+A separate, multi-business transportation booking and dispatch application under development in `fleetcommand/`, built alongside the existing SET limo website without changing its live booking pages.
 
-## Implemented
-- Pure booking validation and status-transition rules.
-- Operator boundary checks on in-memory records.
-- Driver and vehicle schedule conflict detection.
-- Auditable status transitions without mutation of source objects.
-- Proposed PostgreSQL schema with tenant keys and RLS policies.
-- Node built-in test suite: run `npm test` inside this folder.
+**Current status:** Tested pilot code on an isolated GitHub branch. Not deployed, no real test administrator login activated, no live payment collection. See [PILOT-RELEASE.md](PILOT-RELEASE.md) for the consolidated build, deployment instructions, and exact commercial blockers.
 
-## Not yet implemented / NOT production ready
-- Authenticated HTTP API, deployment, password/session lifecycle, subscriptions.
-- Database migration execution, database integration tests, real PostgreSQL roles.
-- Transactional schedule locks, immutable database events, production-grade tenant isolation.
-- Operator/customer UI, driver Android/PWA interface, pricing, payment integrations.
-- Multi-operator acceptance testing and payment-provider setup.
+## Built
 
-The schema is a design artifact, not a verified live database. Do not
-run it against SET production systems. Do not expose this MVP publicly
-before an authenticated API and tenancy isolation tests pass.
+- Multi-operator database isolation and role-based owner/dispatcher/driver access
+- PostgreSQL booking and public request intake, shared customer request links and dispatcher decisions
+- Mobile-responsive operator dashboard and driver trip progress view
+- Driver/vehicle assignment, capacity and schedule conflict prevention
+- Booking activity logs, spreadsheet-safe CSV export
+- Password hashing, login throttling, scoped sessions, CSRF checks, offline account invitations and account reset
+- Disabled-by-default, recipient-allowlisted email-delivery adapter
+- Provider-neutral subscription and external-receipt invoice records
+- Node unit tests, PostgreSQL 16 integration tests, isolated Docker + Caddy staging deployment configuration
 
-## Next build gate
-Implement server-side authentication and tenant-scoped transactional booking
-routes; verify in a dedicated test database, including attempts at cross-tenant
-access and simultaneous overlapping vehicle assignments.
+## Two modes
 
-## Local operator dashboard milestone (fictional demo only)
-
-A local HTTP API and responsive dispatcher interface now live in `src/demo-server.js` and `public/index.html`. No external connections or persistent records are used.
-
-From `fleetcommand/` on a Node.js 22+ computer:
+**Fictional in-memory demonstration** (no persistent records):
 
 ```bash
+npm install
 npm test
 node src/demo-server.js
 ```
 
-Open `http://127.0.0.1:8787` on that computer. The server binds to localhost only.
+Visit `http://127.0.0.1:8787`; the two fictional users documented in `persistent/README.md` and the original demo tests can sign in with demo-only credentials. Data is deleted when the process stops.
 
-**Fictional test accounts only:**
+**PostgreSQL pilot:** Isolated database, authenticated operators, guest intake and HTTPS proxy staging. The full configuration is documented in [PILOT-RELEASE.md](PILOT-RELEASE.md). All real email delivery and payments are opt-in, and external hosting and provider credentials have not been connected.
 
-- `operator-a@example.invalid` / `DemoOnly-A-2026!`
-- `operator-b@example.invalid` / `DemoOnly-B-2026!`
-
-Use these solely to verify separation between two fake businesses. These hardcoded demo credentials and the in-memory session store are NOT safe for production. No external booking messages, real payments, or subscriptions are implemented. Server restart clears all test bookings.
-
-**Production acceptance remains blocked** until real authentication, persistent tenant-isolated storage, database isolation tests, conflict prevention under concurrent requests, CSRF/session hardening, and production deployment authorization have passed.
+**Never point these commands or deployment files at the production SET app or its customer and financial records.**
