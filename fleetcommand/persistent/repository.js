@@ -63,6 +63,25 @@ export class FleetRepository{
    await client.query('COMMIT');return result;
   }catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}
  }
+ async listResources(actor){
+  if(!['OWNER','DISPATCHER'].includes(actor.role))throw Error('Insufficient role');
+  return this.scoped(actor,async db=>{
+   const vehicles=(await db.query('SELECT id,label,capacity FROM fc_vehicles ORDER BY label,id')).rows;
+   const drivers=(await db.query('SELECT user_id AS id,display_name AS name FROM fc_drivers ORDER BY display_name,user_id')).rows;
+   return {vehicles,drivers};
+  });
+ }
+ async addVehicle(actor,{label,capacity}){
+  if(actor.role!=='OWNER')throw Error('Insufficient role');
+  const name=String(label||'').trim(),seats=Number(capacity);
+  if(name.length<2||name.length>80||!Number.isInteger(seats)||seats<1||seats>50)
+   throw Error('Invalid vehicle');
+  return this.scoped(actor,async db=>{
+   const row=(await db.query('INSERT INTO fc_vehicles(operator_id,label,capacity) VALUES($1,$2,$3) RETURNING id,label,capacity',
+    [actor.operator_id,name,seats])).rows[0];
+   return row;
+  });
+ }
  async listBookings(actor){return this.scoped(actor,async db=>(await db.query('SELECT * FROM fc_bookings ORDER BY starts_at,id')).rows);}
  async listEvents(actor){
   return this.scoped(actor,async db=>(await db.query(
