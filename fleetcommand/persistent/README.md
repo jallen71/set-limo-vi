@@ -102,3 +102,27 @@ deployment and Android device tests.
 
 Do not expose this development server publicly. Validate complete browser
 behavior and multi-replica session behavior before commercial release.
+
+## Invitation activation and password-reset foundation
+
+The offline `OperatorProvisioner.inviteUser` method creates a user with an
+unusable random password and `email_verified=false`. These users are denied
+login until activation.
+
+`AccountRecovery` provides trusted-server-only `issue(email,purpose)` and
+`consume(token,purpose,newPassword)` methods. Purpose is `ACTIVATE` or
+`RESET`. Activation tokens expire after 24 hours and reset tokens after
+30 minutes. Issuing a replacement invalidates the previous token of that
+purpose. Redemption is single-use, sets a fresh salted password, and revokes
+all existing sessions. The database stores only SHA-256 token hashes.
+
+This is **not an operational customer recovery service**: issuance returns
+the raw one-time token only to an internal trusted delivery adapter; email
+delivery is NOT configured, and neither issuance nor consumption is exposed
+as a public endpoint. No real emails are sent. The dedicated recovery role
+has no permission to assign roles or disable accounts.
+
+**Before allowing real customers:** create a trusted email-delivery worker
+that never logs secrets or returns token data to callers, rate-limit recovery
+requests, verify a branded HTTPS origin, handle retries and expiry UX, and
+test account activation and reset end to end through the deployed service.
