@@ -26,6 +26,7 @@ if(!adminUrl||!authUrl||!opsUrl){
    await owner(companyB,'b@fictional.invalid');
    const driverA=(await admin.query("INSERT INTO fc_users(operator_id,email,password_salt,password_hash,role) VALUES($1,$2,$3,$4,'DRIVER') RETURNING id",
      [companyA,'driver-a@fictional.invalid',p.salt,p.hash])).rows[0].id;
+   await admin.query("INSERT INTO fc_drivers(user_id,operator_id,display_name) VALUES($1,$2,'Test Driver A')",[driverA,companyA]);
    const vanA=(await admin.query("INSERT INTO fc_vehicles(operator_id,label,capacity) VALUES($1,'Van A',6) RETURNING id",[companyA])).rows[0].id;
    const sessionA=await repository.login('a@fictional.invalid','long fictional password only!');
    const sessionB=await repository.login('b@fictional.invalid','long fictional password only!');
