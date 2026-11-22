@@ -138,6 +138,31 @@ CREATE TABLE IF NOT EXISTS fc_subscriptions (
  last_event_at timestamptz,
  updated_at timestamptz NOT NULL DEFAULT now()
 );
+CREATE TABLE IF NOT EXISTS fc_invoices (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+ operator_id uuid NOT NULL REFERENCES fc_operators(id),
+ plan text NOT NULL CHECK(plan IN ('STARTER','BUSINESS','PRO')),
+ currency text NOT NULL DEFAULT 'USD',
+ amount_cents integer NOT NULL CHECK(amount_cents>0),
+ period_start date NOT NULL,
+ period_end date NOT NULL,
+ status text NOT NULL DEFAULT 'ISSUED' CHECK(status IN ('ISSUED','PAID','VOID')),
+ external_receipt text,
+ issued_at timestamptz NOT NULL DEFAULT now(),
+ paid_at timestamptz,
+ CHECK(period_end>period_start),
+ UNIQUE(operator_id,plan,period_start,period_end)
+);
+CREATE TABLE IF NOT EXISTS fc_invoice_events (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+ invoice_id uuid NOT NULL REFERENCES fc_invoices(id),
+ operator_id uuid NOT NULL REFERENCES fc_operators(id),
+ action text NOT NULL CHECK(action IN ('ISSUED','PAID','VOID')),
+ performed_by text NOT NULL,
+ reason text NOT NULL CHECK(length(trim(reason))>=12),
+ external_reference text,
+ created_at timestamptz NOT NULL DEFAULT now()
+);
 CREATE TABLE IF NOT EXISTS fc_billing_events (
  provider_event_id text PRIMARY KEY,
  event_type text NOT NULL,
@@ -146,6 +171,8 @@ CREATE TABLE IF NOT EXISTS fc_billing_events (
 );
 -- Only the backend login path may inspect global account records.
 -- All operational queries execute under a distinct, non-owner, non-BYPASSRLS database role.
+ALTER TABLE fc_subscriptions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE fc_invoices ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fc_intake_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fc_public_links ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fc_public_requests ENABLE ROW LEVEL SECURITY;
@@ -153,6 +180,8 @@ ALTER TABLE fc_drivers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fc_vehicles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fc_bookings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fc_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE fc_subscriptions FORCE ROW LEVEL SECURITY;
+ALTER TABLE fc_invoices FORCE ROW LEVEL SECURITY;
 ALTER TABLE fc_intake_events FORCE ROW LEVEL SECURITY;
 ALTER TABLE fc_public_links FORCE ROW LEVEL SECURITY;
 ALTER TABLE fc_public_requests FORCE ROW LEVEL SECURITY;
@@ -160,6 +189,8 @@ ALTER TABLE fc_drivers FORCE ROW LEVEL SECURITY;
 ALTER TABLE fc_vehicles FORCE ROW LEVEL SECURITY;
 ALTER TABLE fc_bookings FORCE ROW LEVEL SECURITY;
 ALTER TABLE fc_events FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS fc_subscriptions_tenant ON fc_subscriptions;
+DROP POLICY IF EXISTS fc_invoices_tenant ON fc_invoices;
 DROP POLICY IF EXISTS fc_intake_events_tenant ON fc_intake_events;
 DROP POLICY IF EXISTS fc_public_links_tenant ON fc_public_links;
 DROP POLICY IF EXISTS fc_public_requests_tenant ON fc_public_requests;
@@ -167,6 +198,8 @@ DROP POLICY IF EXISTS fc_drivers_tenant ON fc_drivers;
 DROP POLICY IF EXISTS fc_vehicles_tenant ON fc_vehicles;
 DROP POLICY IF EXISTS fc_bookings_tenant ON fc_bookings;
 DROP POLICY IF EXISTS fc_events_tenant ON fc_events;
+CREATE POLICY fc_subscriptions_tenant ON fc_subscriptions USING (operator_id::text=current_setting('fleetcommand.operator_id',true)) WITH CHECK (operator_id::text=current_setting('fleetcommand.operator_id',true));
+CREATE POLICY fc_invoices_tenant ON fc_invoices USING (operator_id::text=current_setting('fleetcommand.operator_id',true)) WITH CHECK (operator_id::text=current_setting('fleetcommand.operator_id',true));
 CREATE POLICY fc_intake_events_tenant ON fc_intake_events USING (operator_id::text=current_setting('fleetcommand.operator_id',true)) WITH CHECK (operator_id::text=current_setting('fleetcommand.operator_id',true));
 CREATE POLICY fc_public_links_tenant ON fc_public_links USING (operator_id::text=current_setting('fleetcommand.operator_id',true) OR current_user='fc_guest_app' OR current_user='fc_guest_test') WITH CHECK (operator_id::text=current_setting('fleetcommand.operator_id',true));
 CREATE POLICY fc_public_requests_tenant ON fc_public_requests USING (operator_id::text=current_setting('fleetcommand.operator_id',true)) WITH CHECK (operator_id::text=current_setting('fleetcommand.operator_id',true));
