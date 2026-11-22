@@ -24,8 +24,9 @@ try{
  GRANT SELECT,INSERT,UPDATE,DELETE ON fc_login_attempts TO fc_auth_test;
  GRANT SELECT,INSERT,DELETE ON fc_sessions TO fc_auth_test;
  GRANT SELECT,INSERT,UPDATE ON fc_bookings TO fc_ops_test;
+ GRANT SELECT ON fc_drivers TO fc_ops_test;
  GRANT SELECT,INSERT ON fc_events TO fc_ops_test;
- GRANT SELECT ON fc_vehicles TO fc_ops_test;
+ GRANT SELECT,INSERT ON fc_vehicles TO fc_ops_test;
  GRANT SELECT ON fc_users TO fc_recovery_test;
  GRANT UPDATE(password_salt,password_hash,email_verified) ON fc_users TO fc_recovery_test;
  GRANT SELECT,INSERT,UPDATE,DELETE ON fc_account_tokens TO fc_recovery_test;
