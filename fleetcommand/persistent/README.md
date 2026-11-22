@@ -126,3 +126,19 @@ has no permission to assign roles or disable accounts.
 that never logs secrets or returns token data to callers, rate-limit recovery
 requests, verify a branded HTTPS origin, handle retries and expiry UX, and
 test account activation and reset end to end through the deployed service.
+
+## Authorized test administrator contact (designation only)
+
+The project owner selected `testingthings@gmail.com` as the **test
+administrator email** for FleetCommand acceptance testing. This is a
+contact designation, **not** an activated user account or a database grant.
+
+When the isolated test deployment and trusted delivery worker are ready,
+provision this address through the authenticated onboarding process as the
+pilot OWNER/test administrator, deliver a single-use activation link, and
+verify the account is activated by its recipient. Do not create hardcoded
+credentials or place activation secrets in this repository. Do not grant
+production authority automatically based only on this document.
+
+Test messages must be explicitly enabled for this address; no real email
+or live transaction is triggered by this designation.
