@@ -42,6 +42,7 @@ export class OperatorProvisioner{
    if(found.rows.length!==1)throw Error('Operator not found');
    const user=(await db.query(`INSERT INTO fc_users(operator_id,email,password_salt,password_hash,role)
      VALUES($1,$2,$3,$4,$5) RETURNING id,email,role`,[operatorId,address,secret.salt,secret.hash,role])).rows[0];
+   if(role==='DRIVER')await db.query('INSERT INTO fc_drivers(user_id,operator_id,display_name) VALUES($1,$2,$3)',[user.id,operatorId,address]);
    await db.query("INSERT INTO fc_admin_events(operator_id,subject_user_id,operation,performed_by,reason) VALUES($1,$2,'USER_CREATED',$3,$4)",[operatorId,user.id,actor,reason.trim()]);
    return {id:user.id,email:user.email,role:user.role,operatorId};
   });
@@ -59,6 +60,7 @@ export class OperatorProvisioner{
    const user=(await db.query(`INSERT INTO fc_users(operator_id,email,password_salt,password_hash,role,email_verified)
     VALUES($1,$2,$3,$4,$5,false) RETURNING id,email,role`,
     [operatorId,address,unusablePassword.salt,unusablePassword.hash,role])).rows[0];
+   if(role==='DRIVER')await db.query('INSERT INTO fc_drivers(user_id,operator_id,display_name) VALUES($1,$2,$3)',[user.id,operatorId,address]);
    await db.query("INSERT INTO fc_admin_events(operator_id,subject_user_id,operation,performed_by,reason) VALUES($1,$2,'USER_CREATED',$3,$4)",
     [operatorId,user.id,actor,reason.trim()]);
    return {id:user.id,operatorId,email:user.email,role:user.role,activationRequired:true};
