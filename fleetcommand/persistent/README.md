@@ -142,3 +142,38 @@ production authority automatically based only on this document.
 
 Test messages must be explicitly enabled for this address; no real email
 or live transaction is triggered by this designation.
+
+## Recovery email + browser screens — isolated development milestone
+
+- `public/account.html` implements activation and password-reset forms.
+  The sign-in screen links to the reset form. Activation/reset secrets are
+  carried in a browser URL fragment and removed from the browser address bar
+  before form submission.
+- `mail.js` contains an explicit opt-in Resend email adapter. It refuses
+  non-allowlisted recipients, requires an approved sender, and embeds links
+  for the configured origin. An injected fake transport is used in automated
+  tests; it does not send emails.
+- The persistent local gateway adds `/account`,
+  `POST /api/recovery/request`, and `POST /api/recovery/consume`.
+  Requests require same-origin headers. Account-eligibility results are
+  generic, avoiding exposure of whether an address exists.
+- Recovery sending is **disabled by default**. To enable an *isolated test
+  environment only*, an operator must explicitly configure all of
+  `FLEETCOMMAND_RECOVERY_EMAIL_ENABLED=yes`,
+  `FLEETCOMMAND_RECOVERY_DATABASE_URL` (a separate recovery DB role),
+  `FLEETCOMMAND_RESEND_API_KEY`, `FLEETCOMMAND_MAIL_FROM`,
+  `FLEETCOMMAND_MAIL_BASE_URL` and
+  `FLEETCOMMAND_MAIL_TEST_RECIPIENTS=testingthings@gmail.com`.
+  Never commit credentials or place them in client-side JavaScript.
+- The raw token is held solely in the recovery service and internal delivery
+  adapter; it must never be returned by a public request endpoint.
+- Email provider account, verified sender domain, real mail delivery, actual
+  test admin activation, TLS hosting and real browser click testing
+  **have not been completed**.
+- The one-minute in-memory request throttle is test infrastructure only.
+  Shared, per-IP/identifier abuse controls and distributed session handling
+  remain mandatory before public deployment.
+
+The address `testingthings@gmail.com` is an authorized test administrator
+contact designation only; no account or outbound email has been created as
+part of this implementation.
