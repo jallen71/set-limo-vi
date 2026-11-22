@@ -9,7 +9,7 @@ const opsUrl=process.env.FC_TEST_OPS_URL;
 if(!adminUrl||!authUrl||!opsUrl){
  test('PostgreSQL integration requires isolated CI database', {skip:'Set FC_TEST_* URLs to use isolated test database'},()=>{});
 }else{
- test('real PostgreSQL: role restrictions, tenant isolation, audit immutability, concurrent driver collision',async()=>{
+ test('real PostgreSQL: role restrictions, tenant isolation, audit immutability, concurrent driver collision',{timeout:30000},async()=>{
   const admin=new pg.Pool({connectionString:adminUrl});
   const auth=new pg.Pool({connectionString:authUrl});
   const ops=new pg.Pool({connectionString:opsUrl,max:6});
@@ -67,5 +67,5 @@ if(!adminUrl||!authUrl||!opsUrl){
    await repository.logout(sessionA.token);
    await assert.rejects(()=>repository.actor(sessionA.token),/Authentication required/);
   }finally{await Promise.allSettled([admin.end(),auth.end(),ops.end()])}
- },{timeout:30000});
+ });
 }
