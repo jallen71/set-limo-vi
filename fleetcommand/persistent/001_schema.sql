@@ -12,9 +12,9 @@ CREATE TABLE IF NOT EXISTS fc_users (
  password_hash text NOT NULL,
  role text NOT NULL CHECK(role IN ('OWNER','DISPATCHER','DRIVER')),
  disabled boolean NOT NULL DEFAULT false,
- UNIQUE(operator_id,id),
- UNIQUE(lower(email))
+ UNIQUE(operator_id,id)
 );
+CREATE UNIQUE INDEX IF NOT EXISTS fc_users_email_unique ON fc_users(lower(email));
 CREATE TABLE IF NOT EXISTS fc_sessions (
  token_hash text PRIMARY KEY,
  user_id uuid NOT NULL REFERENCES fc_users(id),
