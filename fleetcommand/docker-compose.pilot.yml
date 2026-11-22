@@ -25,6 +25,7 @@ services:
       FC_AUTH_PASSWORD: ${FC_AUTH_PASSWORD:?Auth DB password required}
       FC_OPS_PASSWORD: ${FC_OPS_PASSWORD:?Operations DB password required}
       FC_RECOVERY_PASSWORD: ${FC_RECOVERY_PASSWORD:?Recovery DB password required}
+      FC_GUEST_PASSWORD: ${FC_GUEST_PASSWORD:?Guest DB password required}
     depends_on:
       database:
         condition: service_healthy
@@ -37,6 +38,7 @@ services:
     environment:
       FLEETCOMMAND_ADMIN_DATABASE_URL: postgresql://fc_admin:${FC_ADMIN_PASSWORD}@database:5432/fleetcommand_pilot
       FLEETCOMMAND_RECOVERY_DATABASE_URL: postgresql://fc_recovery_app:${FC_RECOVERY_PASSWORD}@database:5432/fleetcommand_pilot
+      FLEETCOMMAND_GUEST_DATABASE_URL: postgresql://fc_guest_app:${FC_GUEST_PASSWORD}@database:5432/fleetcommand_pilot
       FLEETCOMMAND_PILOT_INVITE_ACK: CREATE_ISOLATED_TEST_OPERATOR
       FLEETCOMMAND_PILOT_BUSINESS: FleetCommand Pilot
       FLEETCOMMAND_PILOT_EMAIL: testingthings@gmail.com
