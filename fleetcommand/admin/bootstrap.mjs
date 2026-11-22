@@ -29,6 +29,7 @@ try{
  GRANT SELECT,INSERT ON fc_events TO fc_ops_app;
  GRANT SELECT,INSERT ON fc_vehicles TO fc_ops_app;
  GRANT SELECT ON fc_drivers TO fc_ops_app;
+ GRANT SELECT ON fc_subscriptions,fc_invoices TO fc_ops_app;
  GRANT SELECT,INSERT,UPDATE ON fc_public_links TO fc_ops_app;
  GRANT SELECT,UPDATE ON fc_public_requests TO fc_ops_app;
  GRANT SELECT,INSERT ON fc_intake_events TO fc_ops_app;
