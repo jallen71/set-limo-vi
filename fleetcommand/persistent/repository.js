@@ -25,9 +25,9 @@ export class FleetRepository{
     outcome={error:'Too many sign-in attempts. Try again later.'};
    }else{
     const fresh=now-new Date(attempt.window_started_at).getTime()>15*60*1000;
-    const {rows}=await db.query('SELECT id,operator_id,email,role,password_salt,password_hash,disabled FROM fc_users WHERE lower(email)=$1 LIMIT 1',[normalized]);
+    const {rows}=await db.query('SELECT id,operator_id,email,role,password_salt,password_hash,disabled,email_verified FROM fc_users WHERE lower(email)=$1 LIMIT 1',[normalized]);
     const user=rows[0];
-    const valid=!!user&&!user.disabled&&await verifyPassword(password,user.password_salt,user.password_hash);
+    const valid=!!user&&!user.disabled&&user.email_verified&&await verifyPassword(password,user.password_salt,user.password_hash);
     if(!valid){
      const count=(fresh?0:Number(attempt.failure_count))+1;
      await db.query(`UPDATE fc_login_attempts SET failure_count=$2,window_started_at=CASE WHEN $3 THEN now() ELSE window_started_at END,
