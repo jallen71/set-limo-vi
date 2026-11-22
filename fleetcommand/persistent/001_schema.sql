@@ -58,6 +58,16 @@ CREATE TABLE IF NOT EXISTS fc_events (
  FOREIGN KEY(operator_id,booking_id) REFERENCES fc_bookings(operator_id,id),
  FOREIGN KEY(operator_id,actor_id) REFERENCES fc_users(operator_id,id)
 );
+-- Offline-only administrative audit. Operational and login roles get no access.
+CREATE TABLE IF NOT EXISTS fc_admin_events (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+ operator_id uuid NOT NULL REFERENCES fc_operators(id),
+ subject_user_id uuid NOT NULL REFERENCES fc_users(id),
+ operation text NOT NULL CHECK(operation IN ('OPERATOR_CREATED','USER_CREATED','USER_DISABLED')),
+ performed_by text NOT NULL CHECK(length(trim(performed_by))>=3),
+ reason text NOT NULL CHECK(length(trim(reason))>=12),
+ occurred_at timestamptz NOT NULL DEFAULT now()
+);
 -- Only the backend login path may inspect global account records.
 -- All operational queries execute under a distinct, non-owner, non-BYPASSRLS database role.
 ALTER TABLE fc_vehicles ENABLE ROW LEVEL SECURITY;
