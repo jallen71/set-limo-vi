@@ -21,6 +21,13 @@ CREATE TABLE IF NOT EXISTS fc_sessions (
  expires_at timestamptz NOT NULL,
  created_at timestamptz NOT NULL DEFAULT now()
 );
+-- Login throttling persists across backend restarts. Store only hashed email keys.
+CREATE TABLE IF NOT EXISTS fc_login_attempts (
+ email_key text PRIMARY KEY,
+ failure_count integer NOT NULL DEFAULT 0 CHECK(failure_count>=0),
+ window_started_at timestamptz NOT NULL DEFAULT now(),
+ locked_until timestamptz
+);
 CREATE TABLE IF NOT EXISTS fc_vehicles (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
  operator_id uuid NOT NULL REFERENCES fc_operators(id),
