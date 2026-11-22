@@ -5,7 +5,7 @@ const {FLEETCOMMAND_ADMIN_DATABASE_URL:url,FLEETCOMMAND_ADMIN_ACK:ack,
  FC_AUTH_PASSWORD:authPassword,FC_OPS_PASSWORD:opsPassword,FC_RECOVERY_PASSWORD:recoveryPassword,FC_GUEST_PASSWORD:guestPassword}=process.env;
 if(ack!=='ISOLATED_FLEETCOMMAND_DATABASE'||!url)throw Error('An explicit isolated FleetCommand database acknowledgement is required');
 const secrets={fc_auth_app:authPassword,fc_ops_app:opsPassword,fc_recovery_app:recoveryPassword,fc_guest_app:guestPassword};
-if(Object.values(secrets).some(s=>typeof s!=='string'||s.length<20)||new Set(Object.values(secrets)).size!==3)
+if(Object.values(secrets).some(s=>typeof s!=='string'||s.length<20)||new Set(Object.values(secrets)).size!==4)
  throw Error('Four distinct strong DB role passwords are required');
 const admin=new pg.Client({connectionString:url});
 await admin.connect();
