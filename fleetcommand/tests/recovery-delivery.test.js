@@ -13,7 +13,7 @@ test('recovery links keep raw token in browser fragment and require HTTPS except
 test('provider adapter is disabled unless configured and cannot email unauthorized recipients',async()=>{
  assert.throws(()=>createMailDelivery({}),/disabled/);
  let sent=null;
- const deliver=createMailDelivery({enabled:true,apiKey:'fictional-test-key',fromAddress:'FleetCommand <verify@example.invalid>',
+ const deliver=createMailDelivery({enabled:true,apiKey:'fictional-test-key',fromAddress:'verify@example.invalid',
   baseUrl:'https://fleet.example.invalid',allowedRecipients:['testingthings@gmail.com'],
   transport:async(url,req)=>{sent={url,req};return {ok:true}}});
  await assert.rejects(()=>deliver({address:'another@gmail.com',token:'b'.repeat(64),purpose:'RESET'}),/allowlist/);
