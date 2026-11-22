@@ -14,14 +14,21 @@ try{
    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='fc_ops_test') THEN
      CREATE ROLE fc_ops_test LOGIN PASSWORD 'fictional-ops-test-only';
    END IF;
+   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='fc_recovery_test') THEN
+     CREATE ROLE fc_recovery_test LOGIN PASSWORD 'fictional-recovery-test-only';
+   END IF;
  END $$;`);
- await admin.query(`GRANT CONNECT ON DATABASE fleetcommand_test TO fc_auth_test,fc_ops_test;
- GRANT USAGE ON SCHEMA public TO fc_auth_test,fc_ops_test;
+ await admin.query(`GRANT CONNECT ON DATABASE fleetcommand_test TO fc_auth_test,fc_ops_test,fc_recovery_test;
+ GRANT USAGE ON SCHEMA public TO fc_auth_test,fc_ops_test,fc_recovery_test;
  GRANT SELECT ON fc_users TO fc_auth_test;
  GRANT SELECT,INSERT,UPDATE,DELETE ON fc_login_attempts TO fc_auth_test;
  GRANT SELECT,INSERT,DELETE ON fc_sessions TO fc_auth_test;
  GRANT SELECT,INSERT,UPDATE ON fc_bookings TO fc_ops_test;
  GRANT SELECT,INSERT ON fc_events TO fc_ops_test;
- GRANT SELECT ON fc_vehicles TO fc_ops_test;`);
+ GRANT SELECT ON fc_vehicles TO fc_ops_test;
+ GRANT SELECT ON fc_users TO fc_recovery_test;
+ GRANT UPDATE(password_salt,password_hash,email_verified) ON fc_users TO fc_recovery_test;
+ GRANT SELECT,INSERT,UPDATE,DELETE ON fc_account_tokens TO fc_recovery_test;
+ GRANT DELETE ON fc_sessions TO fc_recovery_test;`);
  console.log('Isolated PostgreSQL schema and restricted test roles installed');
 }finally{await admin.end()}
