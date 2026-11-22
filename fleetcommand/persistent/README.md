@@ -26,3 +26,36 @@ driver/vehicle assignments. It does **not** connect to the live SET site.
 `001_schema.sql` is intended **only** for a new isolated PostgreSQL database.
 No real company account or data was modified. The existing localhost fictional
 demo remains independent and unchanged.
+
+## Persistent dashboard gateway (new development stage)
+
+`persistent/server.js` exposes the same booking, transition, history and
+login endpoints expected by the existing local dashboard. It uses
+`FleetRepository` and the PostgreSQL driver, but **has not been validated
+against a real PostgreSQL database**.
+
+Start only with a completely isolated test database after the schema has been
+applied and separate roles provisioned. Required environment variables:
+
+- `FLEETCOMMAND_DEV_ACK=ISOLATED_TEST_DATABASE`
+- `FLEETCOMMAND_AUTH_DATABASE_URL` (restricted auth role)
+- `FLEETCOMMAND_OPERATIONS_DATABASE_URL` (restricted operational role)
+- Optional `FLEETCOMMAND_DEV_PORT` (default 8788)
+
+Run `npm install`, then `npm test` and `npm run dev:persistent`.
+The gateway binds to `127.0.0.1` only. There are no seeded real users:
+test-account setup and database permission validation remain prerequisites.
+
+### Known pre-production blockers
+
+- **Real PostgreSQL** RLS/role permission tests, including cross-tenant
+  SELECT/UPDATE and events immutability, are NOT yet complete.
+- Authentication rate limits, secure password recovery, proper browser
+  sessions/cookie protection and TLS reverse proxy are NOT implemented.
+- Schema migration management and trusted test-user provisioning are absent.
+- Driver/vehicle authorization and overlapping assignments still require
+  concurrent database integration tests.
+- The existing dashboard exposes assignment prompts and local demo styling;
+  real operator UX and Android device testing are incomplete.
+- Do not merge as an internet-facing deployment and do not point at the
+  live SET booking system or its customer data.
