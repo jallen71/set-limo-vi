@@ -33,6 +33,11 @@ export class FleetRepository{
   }catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}
  }
  async listBookings(actor){return this.scoped(actor,async db=>(await db.query('SELECT * FROM fc_bookings ORDER BY starts_at,id')).rows);}
+ async listEvents(actor){
+  return this.scoped(actor,async db=>(await db.query(
+   'SELECT operator_id,booking_id,actor_id,previous_status,new_status,reason,occurred_at FROM fc_events ORDER BY occurred_at DESC,id DESC LIMIT 200'
+  )).rows);
+ }
  async createBooking(actor,input){
   if(!['OWNER','DISPATCHER'].includes(actor.role))throw Error('Insufficient role');
   const b=validateBooking({...input,operatorId:actor.operator_id});
