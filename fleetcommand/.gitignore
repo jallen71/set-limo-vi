@@ -1,0 +1,6 @@
+node_modules/
+.env
+.env.*
+!.env.pilot.example
+*.log
+coverage/
