@@ -96,7 +96,7 @@ CREATE TABLE IF NOT EXISTS fc_admin_events (
 -- Billing events are updated exclusively by a separate restricted webhook role.
 CREATE TABLE IF NOT EXISTS fc_subscriptions (
  operator_id uuid PRIMARY KEY REFERENCES fc_operators(id),
- provider text NOT NULL DEFAULT 'STRIPE',
+ provider text NOT NULL DEFAULT 'MANUAL' CHECK(provider IN ('MANUAL','PAYPAL','OTHER')),
  provider_customer_id text UNIQUE,
  provider_subscription_id text UNIQUE,
  plan text NOT NULL DEFAULT 'PILOT' CHECK(plan IN ('PILOT','STARTER','BUSINESS','PRO')),
