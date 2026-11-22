@@ -29,6 +29,6 @@ try{
  GRANT SELECT ON fc_users TO fc_recovery_test;
  GRANT UPDATE(password_salt,password_hash,email_verified) ON fc_users TO fc_recovery_test;
  GRANT SELECT,INSERT,UPDATE,DELETE ON fc_account_tokens TO fc_recovery_test;
- GRANT DELETE ON fc_sessions TO fc_recovery_test;`);
+ GRANT SELECT(user_id),DELETE ON fc_sessions TO fc_recovery_test;`);
  console.log('Isolated PostgreSQL schema and restricted test roles installed');
 }finally{await admin.end()}
