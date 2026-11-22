@@ -63,6 +63,48 @@ export class FleetRepository{
    await client.query('COMMIT');return result;
   }catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}
  }
+ async rotateCustomerBookingLink(actor){
+  if(actor.role!=='OWNER')throw Error('Insufficient role');
+  const token=randomBytes(32).toString('hex');
+  const hash=createHash('sha256').update(token).digest('hex');
+  await this.scoped(actor,async db=>{
+   await db.query(`INSERT INTO fc_public_links(operator_id,token_hash) VALUES($1,$2)
+    ON CONFLICT(operator_id) DO UPDATE SET token_hash=excluded.token_hash,enabled=true,rotated_at=now()`,
+    [actor.operator_id,hash]);
+  });
+  return {token,warning:'Save this link securely. Rotating invalidates the previous link.'};
+ }
+ async listCustomerRequests(actor){
+  if(!['OWNER','DISPATCHER'].includes(actor.role))throw Error('Insufficient role');
+  return this.scoped(actor,async db=>(await db.query(
+   'SELECT id,customer_name,email,pickup,dropoff,starts_at,ends_at,passengers,status,booking_id,created_at FROM fc_public_requests ORDER BY created_at DESC,id DESC LIMIT 100'
+  )).rows);
+ }
+ async decideCustomerRequest(actor,id,{action,reason}={}){
+  if(!['OWNER','DISPATCHER'].includes(actor.role))throw Error('Insufficient role');
+  assertUuid(id);
+  if(!['ACCEPTED','DECLINED'].includes(action)||typeof reason!=='string'||reason.trim().length<5)
+   throw Error('Valid request decision and reason required');
+  return this.scoped(actor,async db=>{
+   const found=(await db.query('SELECT * FROM fc_public_requests WHERE id=$1 FOR UPDATE',[id])).rows[0];
+   if(!found)throw Error('Booking request not found');
+   if(found.status!=='PENDING')throw Error('Booking request already decided');
+   let bookingId=null;
+   if(action==='ACCEPTED'){
+    const r=(await db.query(`INSERT INTO fc_bookings(operator_id,customer_name,pickup,dropoff,starts_at,ends_at,passengers,status)
+      VALUES($1,$2,$3,$4,$5,$6,$7,'REQUESTED') RETURNING id`,
+     [actor.operator_id,found.customer_name,found.pickup,found.dropoff,found.starts_at,found.ends_at,found.passengers])).rows[0];
+    bookingId=r.id;
+    await db.query(`INSERT INTO fc_events(operator_id,booking_id,actor_id,new_status,reason)
+      VALUES($1,$2,$3,'REQUESTED',$4)`,[actor.operator_id,bookingId,actor.id,reason.trim()]);
+   }
+   await db.query('UPDATE fc_public_requests SET status=$1,booking_id=$2 WHERE id=$3',
+    [action,bookingId,id]);
+   await db.query('INSERT INTO fc_intake_events(operator_id,request_id,actor_id,action,reason) VALUES($1,$2,$3,$4,$5)',
+    [actor.operator_id,id,actor.id,action,reason.trim()]);
+   return {requestId:id,status:action,bookingId};
+  });
+ }
  async listResources(actor){
   if(!['OWNER','DISPATCHER'].includes(actor.role))throw Error('Insufficient role');
   return this.scoped(actor,async db=>{
