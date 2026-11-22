@@ -30,6 +30,8 @@ function failure(err){
 }
 export function createPersistentServer(repo,{recovery=null,deliver=null}={}){
  if(!repo||typeof repo.actor!=='function')throw Error('Repository is required');
+ const publicOrigin=process.env.FLEETCOMMAND_PUBLIC_ORIGIN||null;
+ const expectedOrigin=req=>publicOrigin||'http://'+req.headers.host;
  const csrfSessions=new Map();
  const recoveryAttempts=new Map();
  const cookieName='fc_session';
@@ -54,7 +56,7 @@ export function createPersistentServer(repo,{recovery=null,deliver=null}={}){
     return res.end(html);
    }
    if(req.method==='POST'&&path==='/api/recovery/request'){
-    if(req.headers.origin!=='http://'+req.headers.host)throw Error('Origin verification failed');
+    if(req.headers.origin!==expectedOrigin(req))throw Error('Origin verification failed');
     if(!recovery||!deliver)return send(res,503,{error:'Recovery email is not configured'});
     const input=await parseBody(req),email=String(input.email||'').trim().toLowerCase();
     if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)||email.length>200)
@@ -69,7 +71,7 @@ export function createPersistentServer(repo,{recovery=null,deliver=null}={}){
     return send(res,200,{accepted:true});
    }
    if(req.method==='POST'&&path==='/api/recovery/consume'){
-    if(req.headers.origin!=='http://'+req.headers.host)throw Error('Origin verification failed');
+    if(req.headers.origin!==expectedOrigin(req))throw Error('Origin verification failed');
     if(!recovery)return send(res,503,{error:'Recovery is not configured'});
     const b=await parseBody(req);
     await recovery.consume(b.token,b.purpose,b.password);
@@ -77,13 +79,13 @@ export function createPersistentServer(repo,{recovery=null,deliver=null}={}){
    }
    if(req.method==='GET'&&path==='/api/health')return send(res,200,{mode:'ISOLATED_PERSISTENT_DEVELOPMENT',productionReady:false});
    if(req.method==='POST'&&path==='/api/login'){
-    if(req.headers.origin!=='http://'+req.headers.host)throw Error('Origin verification failed');
+    if(req.headers.origin!==expectedOrigin(req))throw Error('Origin verification failed');
     const b=await parseBody(req);
     const session=await repo.login(b.email,b.password);
     const csrf=randomBytes(32).toString('hex');
     csrfSessions.set(session.token,csrf);
     // Secure is deliberately omitted only for localhost HTTP development; public TLS is mandatory.
-    res.setHeader('Set-Cookie',cookieName+'='+session.token+'; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800');
+    res.setHeader('Set-Cookie',cookieName+'='+session.token+'; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800'+(publicOrigin?'; Secure':''));
     return send(res,200,{csrf,operator:session.operatorId,role:session.role});
    }
    // Ignore Authorization bearer headers: persistent browser sessions use HttpOnly cookies.
@@ -91,13 +93,13 @@ export function createPersistentServer(repo,{recovery=null,deliver=null}={}){
    const actor=await repo.actor(raw);
    if(req.method!=='GET'&&req.method!=='HEAD'){
     const origin=req.headers.origin;
-    const expected='http://'+req.headers.host;
+    const expected=expectedOrigin(req);
     if(!origin||origin!==expected||!eq(req.headers['x-fleetcommand-csrf'],csrfSessions.get(raw)))
      throw Error('CSRF or Origin verification failed');
    }
    if(req.method==='POST'&&path==='/api/logout'){
     await repo.logout(raw);csrfSessions.delete(raw);
-    res.setHeader('Set-Cookie',cookieName+'=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0');
+    res.setHeader('Set-Cookie',cookieName+'=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0'+(publicOrigin?'; Secure':''));
     return send(res,200,{ok:true});
    }
    if(req.method==='GET'&&path==='/api/resources'){
@@ -179,7 +181,14 @@ export async function startPersistentServer(){
  if(!Number.isInteger(port)||port<1||port>65535)throw Error('Invalid development port');
  try{
   await Promise.all([authPool.query('SELECT 1'),operationsPool.query('SELECT 1'),...(recoveryPool?[recoveryPool.query('SELECT 1')]:[])]);
-  await new Promise(resolve=>server.listen(port,'127.0.0.1',resolve));
+  const host=process.env.FLEETCOMMAND_PILOT_BIND==='0.0.0.0'?'0.0.0.0':'127.0.0.1';
+  if(host==='0.0.0.0'&&
+    (process.env.FLEETCOMMAND_PILOT_PROXY_ACK!=='ISOLATED_REVERSE_PROXY'||
+     !/^https:\/\/[a-z0-9.-]+(?::443)?$/i.test(process.env.FLEETCOMMAND_PUBLIC_ORIGIN||'')))
+    throw Error('Refusing public bind without isolated HTTPS reverse-proxy configuration');
+  if(process.env.FLEETCOMMAND_PUBLIC_ORIGIN&&!/^https:\/\/[a-z0-9.-]+(?::443)?$/i.test(process.env.FLEETCOMMAND_PUBLIC_ORIGIN))
+   throw Error('Configured public origin must be HTTPS');
+  await new Promise(resolve=>server.listen(port,host,resolve));
   console.log('FleetCommand isolated PostgreSQL development gateway on localhost port '+port);
  }catch(e){await Promise.allSettled([authPool.end(),operationsPool.end(),...(recoveryPool?[recoveryPool.end()]:[])]);throw e;}
  const shutdown=async()=>{server.close();await Promise.allSettled([authPool.end(),operationsPool.end()]);};
