@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS fc_users (
  password_hash text NOT NULL,
  role text NOT NULL CHECK(role IN ('OWNER','DISPATCHER','DRIVER')),
  disabled boolean NOT NULL DEFAULT false,
+ email_verified boolean NOT NULL DEFAULT true,
  UNIQUE(operator_id,id)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS fc_users_email_unique ON fc_users(lower(email));
@@ -21,6 +22,16 @@ CREATE TABLE IF NOT EXISTS fc_sessions (
  expires_at timestamptz NOT NULL,
  created_at timestamptz NOT NULL DEFAULT now()
 );
+-- Single-use invitation/verification and password-reset records; never store raw tokens.
+CREATE TABLE IF NOT EXISTS fc_account_tokens (
+ token_hash text PRIMARY KEY,
+ user_id uuid NOT NULL REFERENCES fc_users(id),
+ purpose text NOT NULL CHECK(purpose IN ('ACTIVATE','RESET')),
+ expires_at timestamptz NOT NULL,
+ consumed_at timestamptz,
+ created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS fc_account_tokens_user ON fc_account_tokens(user_id,purpose);
 -- Login throttling persists across backend restarts. Store only hashed email keys.
 CREATE TABLE IF NOT EXISTS fc_login_attempts (
  email_key text PRIMARY KEY,
