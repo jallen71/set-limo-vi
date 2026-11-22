@@ -7,8 +7,11 @@ import {randomBytes,timingSafeEqual} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {FleetRepository} from './repository.js';
+import {AccountRecovery} from './recovery.js';
+import {createMailDelivery} from './mail.js';
 
 const uiPath=fileURLToPath(new URL('../public/persistent.html',import.meta.url));
+const accountPage=fileURLToPath(new URL('../public/account.html',import.meta.url));
 const send=(res,status,data)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(data));};
 async function parseBody(req){
  const chunks=[];let bytes=0;
@@ -24,9 +27,10 @@ function failure(err){
  if(/Invalid|required|conflict|transition|unknown|overlap|too large|not found/i.test(err.message))return 400;
  return 500;
 }
-export function createPersistentServer(repo){
+export function createPersistentServer(repo,{recovery=null,deliver=null}={}){
  if(!repo||typeof repo.actor!=='function')throw Error('Repository is required');
  const csrfSessions=new Map();
+ const recoveryAttempts=new Map();
  const cookieName='fc_session';
  const cookieToken=req=>String(req.headers.cookie||'').split(';').map(x=>x.trim())
    .find(x=>x.startsWith(cookieName+'='))?.slice(cookieName.length+1);
@@ -40,6 +44,35 @@ export function createPersistentServer(repo){
      'Content-Security-Policy':"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
      'X-Content-Type-Options':'nosniff'});
     return res.end(html);
+   }
+   if(req.method==='GET'&&path==='/account'){
+    const html=await readFile(accountPage);
+    res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store',
+     'Content-Security-Policy':"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+     'Referrer-Policy':'no-referrer','X-Content-Type-Options':'nosniff'});
+    return res.end(html);
+   }
+   if(req.method==='POST'&&path==='/api/recovery/request'){
+    if(req.headers.origin!=='http://'+req.headers.host)throw Error('Origin verification failed');
+    if(!recovery||!deliver)return send(res,503,{error:'Recovery email is not configured'});
+    const input=await parseBody(req),email=String(input.email||'').trim().toLowerCase();
+    if(!/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(email)||email.length>200)
+     return send(res,400,{error:'Invalid email'});
+    // Local defense only; deploy a shared network-aware limiter before exposing publicly.
+    const key=email,now=Date.now(),previous=recoveryAttempts.get(key);
+    if(recoveryAttempts.size>1000)recoveryAttempts.clear();
+    if(previous&&now-previous<60000)return send(res,200,{accepted:true});
+    recoveryAttempts.set(key,now);
+    const issue=await recovery.issue(email,'RESET');
+    if(issue.delivery)await deliver(issue.delivery);
+    return send(res,200,{accepted:true});
+   }
+   if(req.method==='POST'&&path==='/api/recovery/consume'){
+    if(req.headers.origin!=='http://'+req.headers.host)throw Error('Origin verification failed');
+    if(!recovery)return send(res,503,{error:'Recovery is not configured'});
+    const b=await parseBody(req);
+    await recovery.consume(b.token,b.purpose,b.password);
+    return send(res,200,{completed:true});
    }
    if(req.method==='GET'&&path==='/api/health')return send(res,200,{mode:'ISOLATED_PERSISTENT_DEVELOPMENT',productionReady:false});
    if(req.method==='POST'&&path==='/api/login'){
@@ -109,14 +142,29 @@ export async function startPersistentServer(){
  const authPool=new Pool({connectionString:authString,max:5});
  const operationsPool=new Pool({connectionString:opsString,max:5});
  const repo=new FleetRepository({authPool,operationsPool});
- const server=createPersistentServer(repo);
+ let recoveryPool=null,recovery=null,deliver=null;
+ const enabled=process.env.FLEETCOMMAND_RECOVERY_EMAIL_ENABLED==='yes';
+ if(enabled){
+  const url=process.env.FLEETCOMMAND_RECOVERY_DATABASE_URL;
+  if(!url||url===authString||url===opsString)throw Error('Separate recovery role is required');
+  recoveryPool=new Pool({connectionString:url,max:3});
+  recovery=new AccountRecovery(recoveryPool);
+  deliver=createMailDelivery({
+   enabled:true,
+   apiKey:process.env.FLEETCOMMAND_RESEND_API_KEY,
+   fromAddress:process.env.FLEETCOMMAND_MAIL_FROM,
+   baseUrl:process.env.FLEETCOMMAND_MAIL_BASE_URL,
+   allowedRecipients:(process.env.FLEETCOMMAND_MAIL_TEST_RECIPIENTS||'').split(',').filter(Boolean)
+  });
+ }
+ const server=createPersistentServer(repo,{recovery,deliver});
  const port=Number(process.env.FLEETCOMMAND_DEV_PORT||8788);
  if(!Number.isInteger(port)||port<1||port>65535)throw Error('Invalid development port');
  try{
-  await Promise.all([authPool.query('SELECT 1'),operationsPool.query('SELECT 1')]);
+  await Promise.all([authPool.query('SELECT 1'),operationsPool.query('SELECT 1'),...(recoveryPool?[recoveryPool.query('SELECT 1')]:[])]);
   await new Promise(resolve=>server.listen(port,'127.0.0.1',resolve));
   console.log('FleetCommand isolated PostgreSQL development gateway on localhost port '+port);
- }catch(e){await Promise.allSettled([authPool.end(),operationsPool.end()]);throw e;}
+ }catch(e){await Promise.allSettled([authPool.end(),operationsPool.end(),...(recoveryPool?[recoveryPool.end()]:[])]);throw e;}
  const shutdown=async()=>{server.close();await Promise.allSettled([authPool.end(),operationsPool.end()]);};
  process.once('SIGTERM',shutdown);process.once('SIGINT',shutdown);return server;
 }
