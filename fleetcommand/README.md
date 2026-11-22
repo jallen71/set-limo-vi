@@ -26,3 +26,25 @@ before an authenticated API and tenancy isolation tests pass.
 Implement server-side authentication and tenant-scoped transactional booking
 routes; verify in a dedicated test database, including attempts at cross-tenant
 access and simultaneous overlapping vehicle assignments.
+
+## Local operator dashboard milestone (fictional demo only)
+
+A local HTTP API and responsive dispatcher interface now live in `src/demo-server.js` and `public/index.html`. No external connections or persistent records are used.
+
+From `fleetcommand/` on a Node.js 22+ computer:
+
+```bash
+npm test
+node src/demo-server.js
+```
+
+Open `http://127.0.0.1:8787` on that computer. The server binds to localhost only.
+
+**Fictional test accounts only:**
+
+- `operator-a@example.invalid` / `DemoOnly-A-2026!`
+- `operator-b@example.invalid` / `DemoOnly-B-2026!`
+
+Use these solely to verify separation between two fake businesses. These hardcoded demo credentials and the in-memory session store are NOT safe for production. No external booking messages, real payments, or subscriptions are implemented. Server restart clears all test bookings.
+
+**Production acceptance remains blocked** until real authentication, persistent tenant-isolated storage, database isolation tests, conflict prevention under concurrent requests, CSRF/session hardening, and production deployment authorization have passed.
