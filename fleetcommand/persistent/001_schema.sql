@@ -46,6 +46,13 @@ CREATE TABLE IF NOT EXISTS fc_vehicles (
  capacity integer NOT NULL CHECK(capacity BETWEEN 1 AND 50),
  UNIQUE(operator_id,id)
 );
+CREATE TABLE IF NOT EXISTS fc_drivers (
+ user_id uuid NOT NULL,
+ operator_id uuid NOT NULL REFERENCES fc_operators(id),
+ display_name text NOT NULL,
+ PRIMARY KEY(user_id),
+ FOREIGN KEY(operator_id,user_id) REFERENCES fc_users(operator_id,id)
+);
 CREATE TABLE IF NOT EXISTS fc_bookings (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
  operator_id uuid NOT NULL REFERENCES fc_operators(id),
@@ -88,15 +95,19 @@ CREATE TABLE IF NOT EXISTS fc_admin_events (
 );
 -- Only the backend login path may inspect global account records.
 -- All operational queries execute under a distinct, non-owner, non-BYPASSRLS database role.
+ALTER TABLE fc_drivers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fc_vehicles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fc_bookings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fc_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE fc_drivers FORCE ROW LEVEL SECURITY;
 ALTER TABLE fc_vehicles FORCE ROW LEVEL SECURITY;
 ALTER TABLE fc_bookings FORCE ROW LEVEL SECURITY;
 ALTER TABLE fc_events FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS fc_drivers_tenant ON fc_drivers;
 DROP POLICY IF EXISTS fc_vehicles_tenant ON fc_vehicles;
 DROP POLICY IF EXISTS fc_bookings_tenant ON fc_bookings;
 DROP POLICY IF EXISTS fc_events_tenant ON fc_events;
+CREATE POLICY fc_drivers_tenant ON fc_drivers USING (operator_id::text=current_setting('fleetcommand.operator_id',true)) WITH CHECK (operator_id::text=current_setting('fleetcommand.operator_id',true));
 CREATE POLICY fc_vehicles_tenant ON fc_vehicles USING (operator_id::text=current_setting('fleetcommand.operator_id',true)) WITH CHECK (operator_id::text=current_setting('fleetcommand.operator_id',true));
 CREATE POLICY fc_bookings_tenant ON fc_bookings USING (operator_id::text=current_setting('fleetcommand.operator_id',true)) WITH CHECK (operator_id::text=current_setting('fleetcommand.operator_id',true));
 CREATE POLICY fc_events_tenant ON fc_events USING (operator_id::text=current_setting('fleetcommand.operator_id',true)) WITH CHECK (operator_id::text=current_setting('fleetcommand.operator_id',true));
