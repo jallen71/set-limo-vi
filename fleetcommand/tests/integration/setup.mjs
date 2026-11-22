@@ -28,6 +28,7 @@ try{
  GRANT SELECT,INSERT,DELETE ON fc_sessions TO fc_auth_test;
  GRANT SELECT,INSERT,UPDATE ON fc_bookings TO fc_ops_test;
  GRANT SELECT ON fc_drivers TO fc_ops_test;
+ GRANT SELECT ON fc_subscriptions,fc_invoices TO fc_ops_test;
  GRANT SELECT,INSERT,UPDATE ON fc_public_links TO fc_ops_test;
  GRANT SELECT,UPDATE ON fc_public_requests TO fc_ops_test;
  GRANT SELECT,INSERT ON fc_intake_events TO fc_ops_test;
