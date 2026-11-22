@@ -9,6 +9,7 @@ import {fileURLToPath} from 'node:url';
 import {FleetRepository} from './repository.js';
 import {AccountRecovery} from './recovery.js';
 import {createMailDelivery} from './mail.js';
+import {toCsv} from './export.js';
 
 const uiPath=fileURLToPath(new URL('../public/persistent.html',import.meta.url));
 const accountPage=fileURLToPath(new URL('../public/account.html',import.meta.url));
@@ -106,6 +107,14 @@ export function createPersistentServer(repo,{recovery=null,deliver=null}={}){
    if(req.method==='POST'&&path==='/api/vehicles'){
     const vehicle=await repo.addVehicle(actor,await parseBody(req));
     return send(res,201,{vehicle});
+   }
+   if(req.method==='GET'&&path==='/api/reports/bookings.csv'){
+    if(!['OWNER','DISPATCHER'].includes(actor.role))throw Error('Insufficient role');
+    const csv=toCsv(await repo.listBookings(actor));
+    res.writeHead(200,{'Content-Type':'text/csv; charset=utf-8','Cache-Control':'no-store',
+     'Content-Disposition':'attachment; filename="fleetcommand-bookings.csv"',
+     'X-Content-Type-Options':'nosniff'});
+    return res.end(csv);
    }
    if(req.method==='GET'&&path==='/api/bookings'){
     const bookings=await repo.listBookings(actor);
