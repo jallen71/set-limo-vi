@@ -77,6 +77,7 @@ export class OperatorProvisioner{
     if(!target.disabled&&count<=1)throw Error('Cannot disable last active owner');
    }
    await db.query('UPDATE fc_users SET disabled=true WHERE id=$1 AND operator_id=$2',[userId,operatorId]);
+   await db.query('DELETE FROM fc_drivers WHERE user_id=$1 AND operator_id=$2',[userId,operatorId]);
    await db.query('DELETE FROM fc_sessions WHERE user_id=$1',[userId]);
    await db.query("INSERT INTO fc_admin_events(operator_id,subject_user_id,operation,performed_by,reason) VALUES($1,$2,'USER_DISABLED',$3,$4)",[operatorId,userId,actor,reason.trim()]);
    return {disabled:true,id:userId,operatorId};
