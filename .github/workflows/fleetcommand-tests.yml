@@ -1,0 +1,74 @@
+name: FleetCommand core and PostgreSQL tests
+on:
+  push:
+    paths:
+      - 'fleetcommand/**'
+      - '.github/workflows/fleetcommand-tests.yml'
+  pull_request:
+    paths:
+      - 'fleetcommand/**'
+      - '.github/workflows/fleetcommand-tests.yml'
+jobs:
+  pilot-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate isolated pilot Compose configuration
+        run: docker compose --env-file .env.compose.example -f docker-compose.pilot.yml config -q
+        working-directory: fleetcommand
+      - name: Validate Caddy TLS reverse-proxy config
+        run: docker run --rm -e FC_PILOT_DOMAIN=pilot.example.com -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+        working-directory: fleetcommand
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+        working-directory: fleetcommand
+      - run: npm test
+        working-directory: fleetcommand
+  postgres-integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: fleetcommand_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: fictional-admin-test-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d fleetcommand_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      FC_TEST_ADMIN_URL: postgresql://postgres:fictional-admin-test-only@127.0.0.1:5432/fleetcommand_test
+      FC_TEST_AUTH_URL: postgresql://fc_auth_test:fictional-auth-test-only@127.0.0.1:5432/fleetcommand_test
+      FC_TEST_OPS_URL: postgresql://fc_ops_test:fictional-ops-test-only@127.0.0.1:5432/fleetcommand_test
+      FC_TEST_RECOVERY_URL: postgresql://fc_recovery_test:fictional-recovery-test-only@127.0.0.1:5432/fleetcommand_test
+      FC_TEST_GUEST_URL: postgresql://fc_guest_test:fictional-guest-test-only@127.0.0.1:5432/fleetcommand_test
+      FLEETCOMMAND_ADMIN_ACK: ISOLATED_FLEETCOMMAND_DATABASE
+      FLEETCOMMAND_ADMIN_DATABASE_URL: postgresql://postgres:fictional-admin-test-only@127.0.0.1:5432/fleetcommand_test
+      FC_AUTH_PASSWORD: fictional-auth-runtime-password-test
+      FC_OPS_PASSWORD: fictional-ops-runtime-password-test
+      FC_RECOVERY_PASSWORD: fictional-recovery-runtime-password-test
+      FC_GUEST_PASSWORD: fictional-guest-runtime-password-test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+        working-directory: fleetcommand
+      - name: Exercise real isolated database bootstrap
+        run: node admin/bootstrap.mjs
+        working-directory: fleetcommand
+      - run: node tests/integration/setup.mjs
+        working-directory: fleetcommand
+      - run: node --test --test-concurrency=1 tests/integration/*.test.js
+        working-directory: fleetcommand
