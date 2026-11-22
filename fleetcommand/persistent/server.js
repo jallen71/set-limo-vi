@@ -43,6 +43,7 @@ export function createPersistentServer(repo){
    }
    if(req.method==='GET'&&path==='/api/health')return send(res,200,{mode:'ISOLATED_PERSISTENT_DEVELOPMENT',productionReady:false});
    if(req.method==='POST'&&path==='/api/login'){
+    if(req.headers.origin!=='http://'+req.headers.host)throw Error('Origin verification failed');
     const b=await parseBody(req);
     const session=await repo.login(b.email,b.password);
     const csrf=randomBytes(32).toString('hex');
