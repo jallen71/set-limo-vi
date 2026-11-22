@@ -40,8 +40,8 @@ services:
       FLEETCOMMAND_PILOT_INVITE_ACK: CREATE_ISOLATED_TEST_OPERATOR
       FLEETCOMMAND_PILOT_BUSINESS: FleetCommand Pilot
       FLEETCOMMAND_PILOT_EMAIL: testingthings@gmail.com
-      FLEETCOMMAND_RESEND_API_KEY: ${FC_RESEND_API_KEY:?Email provider API key required}
-      FLEETCOMMAND_MAIL_FROM: ${FC_VERIFIED_SENDER:?Verified email sender required}
+      FLEETCOMMAND_RESEND_API_KEY: ${FC_RESEND_API_KEY:-}
+      FLEETCOMMAND_MAIL_FROM: ${FC_VERIFIED_SENDER:-}
       FLEETCOMMAND_MAIL_BASE_URL: https://${FC_PILOT_DOMAIN:?Pilot domain required}
     depends_on:
       bootstrap:
